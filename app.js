@@ -11,7 +11,7 @@
     try { s = JSON.parse(localStorage.getItem(SET_KEY)); } catch {}
     try { old = localStorage.getItem(OLD_CUR_KEY); } catch {}
     // First time opening the app: start with Nigeria settings (₦ and country code 234).
-    const out = { currency: old !== null ? old : '₦', cc: s ? '' : '234', biz: '', lastBackup: '', lang: 'en', welcomed: false, ...(s || {}) };
+    const out = { currency: old !== null ? old : '₦', cc: s ? '' : '234', biz: '', bizInfo: '', lastBackup: '', lang: 'en', welcomed: false, ...(s || {}) };
     if (out.currency.trim() === '#') out.currency = '₦';   // people often type # for Naira
     return out;
   };
@@ -280,6 +280,7 @@
       </div>
 
       <div class="actions">
+        <a class="btn secondary" href="#/receipt/${o.id}">${t('receiptBtn')}</a>
         ${done
           ? `<button class="btn secondary" id="reopen">${t('reopen')}</button>`
           : `<button class="btn" id="complete">${t('complete')}</button>`}
@@ -316,6 +317,52 @@
     $('#del').addEventListener('click', () => {
       if (!confirm(t('cDelete', o.name))) return;
       orders = orders.filter(x => x.id !== id); save(); toast(t('tDeleted')); location.hash = '#/';
+    });
+  }
+
+  /* ---------- Receipt ---------- */
+  function receiptScreen(id) {
+    const o = orders.find(x => x.id === id);
+    if (!o) { location.hash = '#/'; return; }
+    const bal = balance(o), no = o.id.slice(-5).toUpperCase(), biz = settings.biz || 'THE ORDER BOOK';
+    const issued = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    const due = fmtDate(o.due) + (o.time ? ' · ' + fmtTime(o.time) : '');
+    shell(t('receipt'), `
+      <article class="receipt" id="receipt">
+        <header class="rc-head">
+          <b class="rc-biz">${esc(biz)}</b>
+          ${settings.bizInfo ? `<span>${esc(settings.bizInfo)}</span>` : ''}
+        </header>
+        <div class="rc-title">${t('receipt').toUpperCase()}</div>
+        <div class="rc-meta"><span>${t('receiptNo')} <b>${no}</b></span><span>${t('receiptDate')}: <b>${issued}</b></span></div>
+        <div class="rc-block"><small>${t('customerLbl')}</small><b>${esc(o.name)}</b>${o.phone ? `<span>${esc(o.phone)}</span>` : ''}</div>
+        <div class="rc-block"><small>${t('orderDetails')}</small><span class="rc-item">${esc(o.item)}</span></div>
+        <div class="rc-block"><small>${t('collection')}</small><b>${due}</b></div>
+        <div class="rc-block">
+          <small>${t('paymentsHdr')}</small>
+          ${o.payments.length ? o.payments.map(p => `<div class="rc-row"><span>${esc(noteLabel(p.note || 'Payment'))} · ${fmtShort(ymd(new Date(p.date)))}</span><b>${money(p.amount)}</b></div>`).join('')
+            : `<span>${t('noPayYet')}</span>`}
+        </div>
+        <div class="rc-totals">
+          <div class="rc-row"><span>${t('totalPriceRow')}</span><b>${money(o.amount)}</b></div>
+          <div class="rc-row"><span>${t('paidRow')}</span><b>${money(paid(o))}</b></div>
+          <div class="rc-row big"><span>${t('balanceRow')}</span><b>${money(bal)}</b></div>
+        </div>
+        <div class="rc-stamp ${bal ? 'part' : 'full'}">${bal ? t('stampPart') : t('stampPaid')}</div>
+        <p class="rc-thanks">${t('thanks')}</p>
+      </article>
+      <div class="actions noprint" style="margin-top:14px">
+        <button class="btn" id="print">${t('printBtn')}</button>
+        <button class="btn wa" id="sendrc">${t('sendReceipt')}</button>
+      </div>`, { back: '#/order/' + o.id });
+    $('#print').addEventListener('click', () => window.print());
+    $('#sendrc').addEventListener('click', async () => {
+      const text = [`${biz} – ${t('receipt')} #${no}`, settings.bizInfo, '', `${t('customerLbl')}: ${o.name}`, o.item, `${t('collection')}: ${due}`, '',
+        `${t('totalPriceRow')}: ${money(o.amount)}`, `${t('paidRow')}: ${money(paid(o))}`, `${t('balanceRow')}: ${money(bal)}`,
+        bal ? t('stampPart') : t('stampPaid'), '', t('thanks')].filter(x => x !== undefined && x !== '' || x === '').join('\n').replace(/\n{3,}/g, '\n\n');
+      const n = o.phone ? waNumber(o.phone) : '';
+      if (n) { window.open(`https://wa.me/${n}?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); return; }
+      try { if (navigator.share) await navigator.share({ text }); else { await navigator.clipboard.writeText(text); toast(t('receiptCopied')); } } catch { /* cancelled */ }
     });
   }
 
@@ -432,6 +479,8 @@
         <form id="sf" style="gap:12px" novalidate>
           <label>${t('bizName')} <small>${t('bizHint')}</small>
             <input name="biz" maxlength="60" value="${esc(settings.biz)}" placeholder="${t('bizPh')}"></label>
+          <label>${t('bizInfo')} <small>${t('bizInfoHint')}</small>
+            <input name="bizInfo" maxlength="120" value="${esc(settings.bizInfo)}" placeholder="${t('bizInfoPh')}"></label>
           <label>${t('moneySign')} <small>${t('moneyHint')}</small>
             <input name="currency" maxlength="5" value="${esc(settings.currency)}" placeholder="₦"></label>
           <label>${t('cc')} <small>${t('ccHint')}</small>
@@ -453,11 +502,11 @@
 
     $('#sf').addEventListener('submit', e => {
       e.preventDefault(); const f = e.target;
-      settings.biz = f.biz.value.trim(); settings.currency = f.currency.value.trim().replace(/^#$/, '₦');
+      settings.biz = f.biz.value.trim(); settings.bizInfo = f.bizInfo.value.trim(); settings.currency = f.currency.value.trim().replace(/^#$/, '₦');
       settings.cc = f.cc.value.replace(/\D/g, ''); saveSettings(); toast(t('tSettingsSaved')); location.hash = '#/';
     });
     $('#bk').addEventListener('click', () => {
-      const data = JSON.stringify({ app: 'THE ORDER BOOK', version: 1, exportedAt: new Date().toISOString(), settings: { currency: settings.currency, cc: settings.cc, biz: settings.biz }, orders }, null, 2);
+      const data = JSON.stringify({ app: 'THE ORDER BOOK', version: 1, exportedAt: new Date().toISOString(), settings: { currency: settings.currency, cc: settings.cc, biz: settings.biz, bizInfo: settings.bizInfo }, orders }, null, 2);
       const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
       const a = Object.assign(document.createElement('a'), { href: url, download: `tob-backup-${todayStr()}.json` });
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
@@ -480,7 +529,7 @@
         if (!confirm(t('cRestore', clean.length))) return;
         const map = new Map(orders.map(o => [o.id, o])); clean.forEach(o => map.set(o.id, o));
         orders = [...map.values()]; save();
-        if (data.settings) { settings = { ...settings, ...['currency', 'cc', 'biz'].reduce((r, k) => (typeof data.settings[k] === 'string' ? (r[k] = data.settings[k], r) : r), {}) }; saveSettings(); }
+        if (data.settings) { settings = { ...settings, ...['currency', 'cc', 'biz', 'bizInfo'].reduce((r, k) => (typeof data.settings[k] === 'string' ? (r[k] = data.settings[k], r) : r), {}) }; saveSettings(); }
         toast(t('tRestored')); location.hash = '#/';
       } catch { toast(t('tBadFile')); }
       e.target.value = '';
@@ -496,6 +545,7 @@
     else if (h === 'add') formScreen();
     else if (h.startsWith('edit/')) formScreen(h.slice(5));
     else if (h.startsWith('order/')) detailScreen(h.slice(6));
+    else if (h.startsWith('receipt/')) receiptScreen(h.slice(8));
     else if (h === 'report') reportScreen();
     else if (h === 'more') moreScreen();
     else ordersScreen();

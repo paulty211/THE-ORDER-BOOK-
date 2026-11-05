@@ -87,6 +87,11 @@ window.TOB_STRINGS = {
     cRestore: n => `Bring back ${n} order${n === 1 ? '' : 's'} from this backup? Your other orders will stay.`,
     tRestored: 'Orders brought back', tBadFile: 'This is not a THE ORDER BOOK backup file',
     tNoSave: 'Could not save. Phone memory may be full.',
+    receipt: 'Receipt', receiptBtn: '🧾 Receipt (print or share)', receiptNo: 'Receipt no.', receiptDate: 'Date', customerLbl: 'Customer',
+    paymentsHdr: 'Payments', thanks: 'Thank you for your business!', stampPaid: 'PAID IN FULL', stampPart: 'PART PAYMENT',
+    printBtn: '🖨 Print / Save as PDF', sendReceipt: 'Send receipt on WhatsApp', receiptCopied: 'Receipt copied',
+    bizInfo: 'Business phone / address', bizInfoHint: '(shows on your receipts)', bizInfoPh: 'e.g. 12 Market Road, Ibadan · 0803 123 4567',
+    noPayYet: 'No payment yet',
     showWelcome: 'Show welcome guide'
   },
 
@@ -171,6 +176,11 @@ window.TOB_STRINGS = {
     cRestore: n => `Bring back ${n} order${n === 1 ? '' : 's'} from this backup? Your other orders go still dey.`,
     tRestored: 'Orders don come back', tBadFile: 'This no be THE ORDER BOOK backup file',
     tNoSave: 'We no fit save am. Phone memory fit don full.',
+    receipt: 'Receipt', receiptBtn: '🧾 Receipt (print or share)', receiptNo: 'Receipt no.', receiptDate: 'Date', customerLbl: 'Customer',
+    paymentsHdr: 'Payments', thanks: 'Thank you for your patronage!', stampPaid: 'DON PAY FINISH', stampPart: 'PART PAYMENT',
+    printBtn: '🖨 Print / Save as PDF', sendReceipt: 'Send receipt for WhatsApp', receiptCopied: 'Receipt don copy',
+    bizInfo: 'Business phone / address', bizInfoHint: '(e go show for your receipts)', bizInfoPh: 'e.g. 12 Market Road, Ibadan · 0803 123 4567',
+    noPayYet: 'No payment yet',
     showWelcome: 'Show welcome guide'
   }
 };

@@ -1,4 +1,4 @@
-const CACHE = 'tob-v4';
+const CACHE = 'tob-v5';
 const ASSETS = ['./', 'index.html', 'styles.css', 'app.js', 'i18n.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 
