@@ -128,7 +128,7 @@ input:disabled{opacity:.65}
 .navbtn[disabled]{opacity:.35}
 .stat.good b{color:var(--ok)}
 .stat.bad b{color:var(--bad)}
-.two{align-items:end}
+.two{align-items:start}
 
 /* v3: splash, welcome, language */
 .splash{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
@@ -151,3 +151,5 @@ input:disabled{opacity:.65}
 .langs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .lang{font:inherit;font-weight:700;padding:13px;border-radius:12px;border:2px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;min-height:48px}
 .lang[aria-pressed=true]{border-color:var(--brand);background:color-mix(in srgb,var(--brand) 14%,var(--card))}
+
+.balance span{padding-right:10px}

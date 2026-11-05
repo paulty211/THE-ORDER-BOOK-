@@ -154,9 +154,9 @@
           <textarea name="item" required maxlength="500" placeholder="e.g. ${esc(example())}">${esc(v.item)}</textarea>
           <small>${t('orderHint')}</small></label>
         <div class="two">
-          <label>${t('totalPrice')}
+          <label>${t('totalPrice')} <small>${t('totalHint')}</small>
             <input name="amount" required inputmode="decimal" placeholder="0.00" value="${o ? o.amount : ''}"></label>
-          ${o ? `<label>${t('paidSoFarLabel')}<input value="${money(paid(o))}" disabled></label>`
+          ${o ? `<label>${t('paidSoFarLabel')} <small>&nbsp;</small><input value="${money(paid(o))}" disabled></label>`
               : `<label>${t('deposit')} <small>${t('depositHint')}</small><input name="deposit" inputmode="decimal" placeholder="0.00"></label>`}
         </div>
         <div class="balance"><span>${t('balanceBox')}</span><b id="bal">${money(o ? balance(o) : 0)}</b></div>
