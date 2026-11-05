@@ -5,12 +5,15 @@
   /* ---------- storage ---------- */
   const KEY = 'tob.orders.v1', SET_KEY = 'tob.settings.v1', OLD_CUR_KEY = 'tob.currency';
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(orders)); } catch { toast('Could not save – storage full or blocked'); } };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(orders)); } catch { toast('Could not save. Phone memory may be full.'); } };
   const loadSettings = () => {
-    let s = {};
-    try { s = JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch {}
-    if (s.currency === undefined) { try { s.currency = localStorage.getItem(OLD_CUR_KEY) || ''; } catch { s.currency = ''; } }
-    return { currency: '', cc: '', biz: '', lastBackup: '', ...s };
+    let s = null, old = null;
+    try { s = JSON.parse(localStorage.getItem(SET_KEY)); } catch {}
+    try { old = localStorage.getItem(OLD_CUR_KEY); } catch {}
+    // First time opening the app: start with Nigeria settings (₦ and country code 234).
+    const out = { currency: old !== null ? old : '₦', cc: s ? '' : '234', biz: '', lastBackup: '', ...(s || {}) };
+    if (out.currency.trim() === '#') out.currency = '₦';   // people often type # for Naira
+    return out;
   };
   const saveSettings = () => { try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch {} };
   let orders = load();
@@ -38,9 +41,9 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
   }
   function dueInfo(o) {
-    if (o.status === 'completed') return { cls: 'done', label: 'Completed' };
+    if (o.status === 'completed') return { cls: 'done', label: 'Delivered' };
     const d = daysUntil(o.due);
-    if (d < 0) return { cls: 'overdue', label: `${-d} day${d === -1 ? '' : 's'} overdue` };
+    if (d < 0) return { cls: 'overdue', label: `${-d} day${d === -1 ? '' : 's'} late` };
     if (d === 0) return { cls: 'today', label: 'Due today' };
     if (d === 1) return { cls: 'soon', label: 'Tomorrow' };
     if (d <= 3) return { cls: 'soon', label: `In ${d} days` };
@@ -95,17 +98,17 @@
     const dueSoon = pending.filter(o => daysUntil(o.due) <= 0).length;
     shell(`THE ORDER BOOK<span class="sub">TOB</span>`, `
       <div class="summary">
-        <div class="stat"><b>${pending.length}</b><span>Pending orders${dueSoon ? ` · ${dueSoon} due/overdue` : ''}</span></div>
-        <div class="stat"><b>${money(owed)}</b><span>Balance to collect</span></div>
+        <div class="stat"><b>${pending.length}</b><span>Orders to deliver${dueSoon ? ` · ${dueSoon} due or late` : ''}</span></div>
+        <div class="stat"><b>${money(owed)}</b><span>Money customers still owe</span></div>
       </div>
       <div class="tabs" role="tablist">
-        <button role="tab" data-tab="pending" aria-selected="${tab === 'pending'}">Pending</button>
-        <button role="tab" data-tab="completed" aria-selected="${tab === 'completed'}">Completed</button>
+        <button role="tab" data-tab="pending" aria-selected="${tab === 'pending'}">To deliver</button>
+        <button role="tab" data-tab="completed" aria-selected="${tab === 'completed'}">Delivered</button>
       </div>
-      <input class="search" type="search" id="q" placeholder="Search customer or order details" value="${esc(query)}" autocomplete="off">
+      <input class="search" type="search" id="q" placeholder="Search by name or what they ordered" value="${esc(query)}" autocomplete="off">
       <ul class="list" id="list"></ul>
       <a class="fab" href="#/add"><span>+</span> Add order</a>`,
-      { extra: '<a class="iconbtn" href="#/report">Report</a><a class="iconbtn" href="#/more">More</a>' });
+      { extra: '<a class="iconbtn" href="#/report">Report</a><a class="iconbtn" href="#/more">Settings</a>' });
 
     const renderList = () => {
       const q = query.trim().toLowerCase();
@@ -120,10 +123,10 @@
           <div class="row"><span class="name">${esc(o.name)}</span><span class="badge ${di.cls}">${di.label}</span></div>
           <div class="what">${esc(o.item)}</div>
           <div class="row"><span style="color:var(--muted);font-size:13px">Total ${money(o.amount)}</span>
-            <span class="owing ${bal ? '' : 'clear'}">${bal ? 'Owes ' + money(bal) : 'Fully paid'}</span></div>
+            <span class="owing ${bal ? '' : 'clear'}">${bal ? 'Owes ' + money(bal) : 'Paid in full'}</span></div>
         </a></li>`;
       }).join('') : `<li class="empty"><big>${q ? '🔍' : tab === 'pending' ? '📒' : '✅'}</big>${
-        q ? 'No matching orders.' : tab === 'pending' ? 'No pending orders.<br>Tap “Add order” to record your first one.' : 'No completed orders yet.'}</li>`;
+        q ? 'No matching orders.' : tab === 'pending' ? 'No orders yet.<br>Tap “Add order” to write your first one.' : 'No delivered orders yet.'}</li>`;
     };
     renderList();
     $('#q').addEventListener('input', e => { query = e.target.value; renderList(); });
@@ -139,19 +142,19 @@
       <form id="f" novalidate>
         <label>Customer name
           <input name="name" required maxlength="80" autocomplete="off" autocapitalize="words" placeholder="e.g. Mrs. Adeyemi" value="${esc(v.name)}"></label>
-        <label>Phone / WhatsApp <small>(optional – needed to message the customer)</small>
+        <label>Customer phone number <small>(Optional. Add it so you can send the customer a WhatsApp message.)</small>
           <input name="phone" type="tel" maxlength="30" placeholder="e.g. 0803 123 4567" value="${esc(v.phone)}"></label>
         <label>Order details
           <textarea name="item" required maxlength="500" placeholder="e.g. ${esc(example())}">${esc(v.item)}</textarea>
           <small>Meals, outfits, hair, cakes, prints, repairs… whatever you are making or selling.</small></label>
         <div class="two">
-          <label>Total amount
+          <label>Total price
             <input name="amount" required inputmode="decimal" placeholder="0.00" value="${o ? o.amount : ''}"></label>
-          ${o ? `<label>Paid so far<input value="${money(paid(o))}" disabled></label>`
-              : `<label>Deposit paid<input name="deposit" inputmode="decimal" placeholder="0.00"></label>`}
+          ${o ? `<label>Money paid so far<input value="${money(paid(o))}" disabled></label>`
+              : `<label>Deposit <small>(money paid already)</small><input name="deposit" inputmode="decimal" placeholder="0.00"></label>`}
         </div>
-        <div class="balance"><span>Balance due</span><b id="bal">${money(o ? balance(o) : 0)}</b></div>
-        <label>Collection date
+        <div class="balance"><span>Balance (money left to pay)</span><b id="bal">${money(o ? balance(o) : 0)}</b></div>
+        <label>Collection date <small>(the day the customer will come for it)</small>
           <input name="due" type="date" required ${o ? '' : `min="${todayStr()}"`} value="${esc(v.due)}"></label>
         <div class="err" id="err" role="alert"></div>
         <button class="btn" type="submit">${o ? 'Save changes' : 'Save order'}</button>
@@ -169,13 +172,13 @@
       const amount = num(f.amount.value), due = f.due.value;
       const dep = o || f.deposit.value.trim() === '' ? 0 : num(f.deposit.value);
       const fail = m => { $('#err').textContent = m; };
-      if (!name) return fail('Enter the customer name.');
-      if (!item) return fail('Describe the order.');
-      if (!(amount > 0)) return fail('Enter the total amount.');
-      if (!(dep >= 0)) return fail('Deposit must be a number.');
-      if (dep > amount) return fail('Deposit cannot be more than the total amount.');
-      if (o && amount < already) return fail(`Total cannot be less than the ${money(already)} already paid.`);
-      if (!due) return fail('Pick a collection date.');
+      if (!name) return fail('Please type the customer’s name.');
+      if (!item) return fail('Please write what the customer ordered.');
+      if (!(amount > 0)) return fail('Please type the total price.');
+      if (!(dep >= 0)) return fail('Deposit must be a number. If none, leave it empty.');
+      if (dep > amount) return fail('Deposit cannot be more than the total price.');
+      if (o && amount < already) return fail(`Total price cannot be less than the ${money(already)} the customer has already paid.`);
+      if (!due) return fail('Please choose the collection date.');
       if (o) {
         Object.assign(o, { name, item, amount, due, phone: f.phone.value.trim() });
         save(); toast('Changes saved'); location.hash = '#/order/' + o.id;
@@ -199,12 +202,12 @@
   }
   function whatsapp(o, kind) {
     const n = waNumber(o.phone);
-    if (!n) { toast('Add your country code first (More → Settings)'); location.hash = '#/more'; return; }
+    if (!n) { toast('Please set your country code first (in Settings)'); location.hash = '#/more'; return; }
     const bal = balance(o), what = clip(o.item, 70), sign = settings.biz ? `\n– ${settings.biz}` : '';
     const text = kind === 'ready'
       ? `Hello ${o.name}, your order (${what}) is ready for collection.${bal ? ` Balance to pay: ${money(bal)}.` : ' Thank you!'}${sign}`
-      : `Hello ${o.name}, a friendly reminder that the balance of ${money(bal)} for your order (${what}) is due${
-          o.status === 'completed' ? '' : ' by ' + fmtDate(o.due)}. Thank you!${sign}`;
+      : `Hello ${o.name}, this is a gentle reminder about the balance of ${money(bal)} for your order (${what}).${
+          o.status === 'completed' ? '' : ' Please pay before ' + fmtDate(o.due) + '.'} Thank you!${sign}`;
     window.open(`https://wa.me/${n}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   }
 
@@ -216,7 +219,7 @@
     shell('Order Details', `
       <div class="card">
         <p class="big-name">${esc(o.name)}</p>
-        <p style="margin:4px 0 10px"><span class="badge ${di.cls}">${done ? 'Completed' : di.label}</span></p>
+        <p style="margin:4px 0 10px"><span class="badge ${di.cls}">${done ? 'Delivered' : di.label}</span></p>
         ${o.phone ? `<a href="tel:${esc(o.phone)}" class="chip" style="text-decoration:none;display:inline-block">📞 ${esc(o.phone)}</a>` : ''}
         <h2 style="margin-top:14px">Order details</h2>
         <p class="notes">${esc(o.item)}</p>
@@ -224,15 +227,15 @@
       </div>
 
       <div class="card">
-        <h2>Payment</h2>
-        <div class="kv"><span>Total</span><b>${money(o.amount)}</b></div>
-        <div class="kv"><span>Paid so far</span><b>${money(paid(o))}</b></div>
-        <div class="kv total"><span>Balance</span><b style="color:${bal ? 'var(--bad)' : 'var(--ok)'}">${bal ? money(bal) : 'Paid in full'}</b></div>
+        <h2>Money</h2>
+        <div class="kv"><span>Total price</span><b>${money(o.amount)}</b></div>
+        <div class="kv"><span>Money paid so far</span><b>${money(paid(o))}</b></div>
+        <div class="kv total"><span>Balance (left to pay)</span><b style="color:${bal ? 'var(--bad)' : 'var(--ok)'}">${bal ? money(bal) : 'Paid in full'}</b></div>
         ${bal && !done ? `
           <form id="pay" style="margin-top:14px" novalidate>
-            <div class="pay-row"><input name="amt" inputmode="decimal" placeholder="Amount received" aria-label="Amount received">
-              <button class="btn small" type="submit">Add</button></div>
-            <div class="chips"><button type="button" class="chip" id="full">Pay full balance (${money(bal)})</button></div>
+            <div class="pay-row"><input name="amt" inputmode="decimal" placeholder="Amount customer just paid" aria-label="Amount customer just paid">
+              <button class="btn small" type="submit">Save</button></div>
+            <div class="chips"><button type="button" class="chip" id="full">Customer paid everything left (${money(bal)})</button></div>
             <div class="err" id="err" role="alert"></div>
           </form>` : ''}
         ${o.payments.length ? `<ul class="hist">${o.payments.map(p =>
@@ -240,31 +243,31 @@
       </div>
 
       <div class="card">
-        <h2>Message customer on WhatsApp</h2>
+        <h2>Send WhatsApp message to customer</h2>
         ${o.phone ? `<div class="actions">
-          <button class="btn wa" id="wa-ready">Order is ready for collection</button>
-          ${bal ? `<button class="btn wa" id="wa-due">Balance reminder (${money(bal)})</button>` : ''}
-        </div>` : `<p style="margin:0;color:var(--muted)">Add the customer’s phone number (tap Edit) to send messages.</p>`}
+          <button class="btn wa" id="wa-ready">Tell customer: your order is ready</button>
+          ${bal ? `<button class="btn wa" id="wa-due">Remind customer to pay balance (${money(bal)})</button>` : ''}
+        </div>` : `<p style="margin:0;color:var(--muted)">Tap Edit and add the customer’s phone number to send WhatsApp messages.</p>`}
       </div>
 
       <div class="actions">
         ${done
-          ? `<button class="btn secondary" id="reopen">Reopen order</button>`
-          : `<button class="btn" id="complete">✓ Mark as completed</button>`}
+          ? `<button class="btn secondary" id="reopen">Move back to “To deliver”</button>`
+          : `<button class="btn" id="complete">✓ Customer has collected – mark as delivered</button>`}
         <button class="btn danger" id="del">Delete order</button>
       </div>`, { back: true, extra: `<a class="iconbtn" href="#/edit/${o.id}">✎ Edit</a>` });
 
     const pay = (amount, note) => {
       o.payments.push({ amount, date: new Date().toISOString(), note }); save();
-      toast(balance(o) ? 'Payment recorded' : 'Paid in full 🎉'); detailScreen(id);
+      toast(balance(o) ? 'Payment saved' : 'Fully paid 🎉'); detailScreen(id);
     };
     const pf = $('#pay');
     if (pf) {
       pf.addEventListener('submit', e => {
         e.preventDefault();
         const a = num(pf.amt.value);
-        if (!(a > 0)) return ($('#err').textContent = 'Enter the amount received.');
-        if (a > bal + 0.001) return ($('#err').textContent = `That is more than the balance (${money(bal)}).`);
+        if (!(a > 0)) return ($('#err').textContent = 'Type the amount the customer paid.');
+        if (a > bal + 0.001) return ($('#err').textContent = `That is more than what is left to pay (${money(bal)}).`);
         pay(a, 'Payment');
       });
       $('#full').addEventListener('click', () => pay(bal, 'Final payment'));
@@ -274,14 +277,14 @@
     if (w2) w2.addEventListener('click', () => whatsapp(o, 'due'));
     const c = $('#complete');
     if (c) c.addEventListener('click', () => {
-      if (bal > 0 && !confirm(`${o.name} still owes ${money(bal)}. Mark as completed anyway?`)) return;
+      if (bal > 0 && !confirm(`${o.name} has not finished paying (owes ${money(bal)}). Mark as delivered anyway?`)) return;
       o.status = 'completed'; o.completedAt = new Date().toISOString(); save();
-      tab = 'pending'; toast('Order completed'); location.hash = '#/';
+      tab = 'pending'; toast('Order marked as delivered'); location.hash = '#/';
     });
     const r = $('#reopen');
-    if (r) r.addEventListener('click', () => { o.status = 'pending'; delete o.completedAt; save(); toast('Order reopened'); detailScreen(id); });
+    if (r) r.addEventListener('click', () => { o.status = 'pending'; delete o.completedAt; save(); toast('Order moved back to To deliver'); detailScreen(id); });
     $('#del').addEventListener('click', () => {
-      if (!confirm(`Delete the order for ${o.name}? This cannot be undone.`)) return;
+      if (!confirm(`Delete ${o.name}’s order? You cannot get it back.`)) return;
       orders = orders.filter(x => x.id !== id); save(); toast('Order deleted'); location.hash = '#/';
     });
   }
@@ -320,26 +323,26 @@
         <div class="stat bad"><b>${money(owed)}</b><span>Still owed · ${owing} order${owing === 1 ? '' : 's'}</span></div>
       </div>
       <div class="card">
-        <h2>This week at a glance</h2>
-        <div class="kv"><span>New orders</span><b>${newCount}</b></div>
-        <div class="kv"><span>Orders completed</span><b>${doneCount}</b></div>
-        <div class="kv"><span>Orders due this week</span><b>${dueWeek.length}${dueWeekBal ? ' · ' + money(dueWeekBal) + ' to collect' : ''}</b></div>
-        <div class="kv"><span>Overdue with balance</span><b>${overdue.length}</b></div>
+        <h2>This week in short</h2>
+        <div class="kv"><span>New orders taken</span><b>${newCount}</b></div>
+        <div class="kv"><span>Orders delivered</span><b>${doneCount}</b></div>
+        <div class="kv"><span>Orders to deliver this week</span><b>${dueWeek.length}${dueWeekBal ? ' · ' + money(dueWeekBal) + ' to collect' : ''}</b></div>
+        <div class="kv"><span>Late orders still owing</span><b>${overdue.length}</b></div>
       </div>
       <div class="card">
         <h2>Payments received</h2>
         ${pays.length ? `<ul class="hist" style="margin-top:0">${pays.map(p =>
           `<li><span>${esc(p.name)} · ${esc(p.note || 'Payment')} · ${fmtShort(ymd(new Date(p.date)))}</span><b>${money(p.amount)}</b></li>`).join('')}</ul>`
-          : '<p style="margin:0;color:var(--muted)">No payments recorded this week.</p>'}
+          : '<p style="margin:0;color:var(--muted)">No payment recorded this week.</p>'}
       </div>
-      ${dueWeek.length ? `<div class="card"><h2>Due this week</h2><ul class="hist" style="margin-top:0">${dueWeek.map(o =>
+      ${dueWeek.length ? `<div class="card"><h2>To deliver this week</h2><ul class="hist" style="margin-top:0">${dueWeek.map(o =>
         `<li><a href="#/order/${o.id}" style="color:inherit;text-decoration:none;flex:1">${esc(o.name)} · ${fmtShort(o.due)}</a><b>${balance(o) ? money(balance(o)) + ' owed' : 'Paid'}</b></li>`).join('')}</ul></div>` : ''}
       <button class="btn secondary" id="share">Share this report</button>`, { back: true });
 
     $('#prev').addEventListener('click', () => { weekOffset--; reportScreen(); });
     $('#next').addEventListener('click', () => { if (weekOffset < 0) { weekOffset++; reportScreen(); } });
     $('#share').addEventListener('click', async () => {
-      const text = `${settings.biz || 'THE ORDER BOOK'} – weekly report (${range})\nMoney received: ${money(received)}\nStill owed: ${money(owed)} (${owing} order${owing === 1 ? '' : 's'})\nNew orders: ${newCount} · Completed: ${doneCount}`;
+      const text = `${settings.biz || 'THE ORDER BOOK'} – weekly report (${range})\nMoney received: ${money(received)}\nStill owed: ${money(owed)} (${owing} order${owing === 1 ? '' : 's'})\nNew orders: ${newCount} · Delivered: ${doneCount}`;
       try {
         if (navigator.share) await navigator.share({ text });
         else { await navigator.clipboard.writeText(text); toast('Report copied'); }
@@ -350,32 +353,32 @@
   /* ---------- More: settings, backup & restore ---------- */
   function moreScreen() {
     const lb = settings.lastBackup ? new Date(settings.lastBackup).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'never';
-    shell('More', `
+    shell('Settings', `
       <div class="card">
         <h2>Settings</h2>
         <form id="sf" style="gap:12px" novalidate>
-          <label>Business name <small>(signs your WhatsApp messages)</small>
+          <label>Your business name <small>(it will show at the end of your WhatsApp messages)</small>
             <input name="biz" maxlength="60" value="${esc(settings.biz)}" placeholder="e.g. Ada’s Kitchen"></label>
-          <label>Currency symbol
-            <input name="currency" maxlength="5" value="${esc(settings.currency)}" placeholder="e.g. ₦, $, £, KSh"></label>
-          <label>Your country code <small>(so numbers like 0803… work on WhatsApp)</small>
-            <input name="cc" inputmode="numeric" maxlength="5" value="${esc(settings.cc)}" placeholder="e.g. 234 for Nigeria, 233 Ghana, 254 Kenya"></label>
+          <label>Money sign <small>(type ₦ for Naira. You can copy it from here: ₦)</small>
+            <input name="currency" maxlength="5" value="${esc(settings.currency)}" placeholder="₦"></label>
+          <label>Country code <small>(Nigeria is 234. This makes WhatsApp work with numbers that start with 0.)</small>
+            <input name="cc" inputmode="numeric" maxlength="5" value="${esc(settings.cc)}" placeholder="234"></label>
           <button class="btn" type="submit">Save settings</button>
         </form>
       </div>
       <div class="card">
-        <h2>Backup &amp; restore</h2>
-        <p style="margin:0 0 12px;color:var(--muted);font-size:14px">Your orders are stored only on this phone. Save a backup file regularly so nothing is lost if the phone is lost, reset or the browser data is cleared.<br>Last backup: <b>${lb}</b> · ${orders.length} order${orders.length === 1 ? '' : 's'}</p>
+        <h2>Backup (save a copy of your orders)</h2>
+        <p style="margin:0 0 12px;color:var(--muted);font-size:14px">Your orders are kept only on this phone. If the phone is lost, spoilt or you clear the browser, they will be gone. Save a backup copy often and keep it in WhatsApp or Google Drive.<br>Last backup: <b>${lb}</b> · ${orders.length} order${orders.length === 1 ? '' : 's'} on this phone</p>
         <div class="actions">
-          <button class="btn" id="bk">Download backup</button>
-          <button class="btn secondary" id="rs">Restore from backup file</button>
+          <button class="btn" id="bk">Save backup copy</button>
+          <button class="btn secondary" id="rs">Bring back orders from a backup copy</button>
           <input type="file" id="file" accept=".json,application/json" hidden>
         </div>
       </div>`, { back: true });
 
     $('#sf').addEventListener('submit', e => {
       e.preventDefault(); const f = e.target;
-      settings.biz = f.biz.value.trim(); settings.currency = f.currency.value.trim();
+      settings.biz = f.biz.value.trim(); settings.currency = f.currency.value.trim().replace(/^#$/, '₦');
       settings.cc = f.cc.value.replace(/\D/g, ''); saveSettings(); toast('Settings saved'); location.hash = '#/';
     });
     $('#bk').addEventListener('click', () => {
@@ -383,7 +386,7 @@
       const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
       const a = Object.assign(document.createElement('a'), { href: url, download: `tob-backup-${todayStr()}.json` });
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
-      settings.lastBackup = new Date().toISOString(); saveSettings(); toast('Backup downloaded'); moreScreen();
+      settings.lastBackup = new Date().toISOString(); saveSettings(); toast('Backup copy saved to your phone'); moreScreen();
     });
     $('#rs').addEventListener('click', () => $('#file').click());
     $('#file').addEventListener('change', async e => {
@@ -399,12 +402,12 @@
             ...(o.completedAt ? { completedAt: String(o.completedAt) } : {}),
             payments: o.payments.filter(p => p && Number.isFinite(p.amount)).map(p => ({ amount: p.amount, date: String(p.date || new Date().toISOString()), note: String(p.note || 'Payment') })) }));
         if (!clean.length) throw 0;
-        if (!confirm(`Restore ${clean.length} order${clean.length === 1 ? '' : 's'} from this backup?\nOrders with the same ID are replaced; your other orders are kept.`)) return;
+        if (!confirm(`Bring back ${clean.length} order${clean.length === 1 ? '' : 's'} from this backup? Your other orders will stay.`)) return;
         const map = new Map(orders.map(o => [o.id, o])); clean.forEach(o => map.set(o.id, o));
         orders = [...map.values()]; save();
         if (data.settings) { settings = { ...settings, ...['currency', 'cc', 'biz'].reduce((r, k) => (typeof data.settings[k] === 'string' ? (r[k] = data.settings[k], r) : r), {}) }; saveSettings(); }
-        toast('Backup restored'); location.hash = '#/';
-      } catch { toast('That file is not a valid TOB backup'); }
+        toast('Orders brought back'); location.hash = '#/';
+      } catch { toast('This is not a THE ORDER BOOK backup file'); }
       e.target.value = '';
     });
   }

@@ -128,3 +128,4 @@ input:disabled{opacity:.65}
 .navbtn[disabled]{opacity:.35}
 .stat.good b{color:var(--ok)}
 .stat.bad b{color:var(--bad)}
+.two{align-items:end}
