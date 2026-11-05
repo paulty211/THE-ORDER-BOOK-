@@ -106,16 +106,21 @@
   ];
   const example = () => EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
 
+  let liveRefresh = null;   // set by the screen on show; called every minute and when the app comes back
+
   /* ---------- screen 1: Orders ---------- */
   let tab = 'pending', query = '';
   function ordersScreen() {
-    const pending = orders.filter(o => o.status !== 'completed');
-    const owed = pending.reduce((t, o) => t + balance(o), 0);
-    const dueSoon = pending.filter(o => daysUntil(o.due) <= 0 || isLate(o)).length;
+    const stats = () => {
+      const pending = orders.filter(o => o.status !== 'completed');
+      const dueSoon = pending.filter(o => daysUntil(o.due) <= 0 || isLate(o)).length;
+      return { n: pending.length, owed: pending.reduce((t, o) => t + balance(o), 0), dueSoon };
+    };
+    const st = stats();
     shell(`THE ORDER BOOK<span class="sub">TOB</span>`, `
       <div class="summary">
-        <div class="stat"><b>${pending.length}</b><span>${t('ordersToDeliver')}${dueSoon ? t('dueOrLate', dueSoon) : ''}</span></div>
-        <div class="stat"><b>${money(owed)}</b><span>${t('moneyOwed')}</span></div>
+        <div class="stat"><b id="s-n">${st.n}</b><span id="s-lbl">${t('ordersToDeliver')}${st.dueSoon ? t('dueOrLate', st.dueSoon) : ''}</span></div>
+        <div class="stat"><b id="s-owed">${money(st.owed)}</b><span>${t('moneyOwed')}</span></div>
       </div>
       <div class="tabs" role="tablist">
         <button role="tab" data-tab="pending" aria-selected="${tab === 'pending'}">${t('tabTo')}</button>
@@ -145,6 +150,13 @@
         q ? t('noMatch') : tab === 'pending' ? t('emptyTo') : t('emptyDone')}</li>`;
     };
     renderList();
+    // Live refresh: update badges, colours and counts in place (no scroll jump, search box untouched).
+    liveRefresh = () => {
+      const s = stats();
+      $('#s-n').textContent = s.n; $('#s-owed').textContent = money(s.owed);
+      $('#s-lbl').textContent = t('ordersToDeliver') + (s.dueSoon ? t('dueOrLate', s.dueSoon) : '');
+      renderList();
+    };
     $('#q').addEventListener('input', e => { query = e.target.value; renderList(); });
     document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; ordersScreen(); }));
   }
@@ -236,7 +248,7 @@
     shell(t('detailsTitle'), `
       <div class="card">
         <p class="big-name">${esc(o.name)}</p>
-        <p style="margin:4px 0 10px"><span class="badge ${di.cls}">${done ? t('deliveredBadge') : di.label}</span></p>
+        <p style="margin:4px 0 10px"><span class="badge ${di.cls}" id="dbadge">${done ? t('deliveredBadge') : di.label}</span></p>
         ${o.phone ? `<a href="tel:${esc(o.phone)}" class="chip" style="text-decoration:none;display:inline-block">📞 ${esc(o.phone)}</a>` : ''}
         <h2 style="margin-top:14px">${t('orderDetails')}</h2>
         <p class="notes">${esc(o.item)}</p>
@@ -274,6 +286,7 @@
         <button class="btn danger" id="del">${t('del')}</button>
       </div>`, { back: true, extra: `<a class="iconbtn" href="#/edit/${o.id}">${t('edit')}</a>` });
 
+    if (!done) liveRefresh = () => { const d = dueInfo(o), el = $('#dbadge'); if (el) { el.className = 'badge ' + d.cls; el.textContent = d.label; } };
     const pay = (amount, note) => {
       o.payments.push({ amount, date: new Date().toISOString(), note }); save();
       toast(balance(o) ? t('tPaySaved') : t('tFullPaid')); detailScreen(id);
@@ -476,6 +489,7 @@
 
   /* ---------- router ---------- */
   function route() {
+    liveRefresh = null;
     const h = location.hash.replace(/^#\/?/, '');
     if (h === 'welcome') welcomeScreen();
     else if (!settings.welcomed && !h) welcomeScreen();
@@ -489,7 +503,8 @@
   const isFormRoute = () => /^#\/(add|edit\/|more|welcome)/.test(location.hash) || !settings.welcomed;
   window.addEventListener('hashchange', route);
   window.addEventListener('storage', e => { if (e.key === KEY && !isFormRoute()) { orders = load(); route(); } });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !isFormRoute()) route(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) return; if (liveRefresh) liveRefresh(); else if (!isFormRoute()) route(); });
+  setInterval(() => { if (!document.hidden && liveRefresh) liveRefresh(); }, 30000);
   route();
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http'))
