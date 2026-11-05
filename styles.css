@@ -117,3 +117,14 @@ input:focus,textarea:focus{outline:none;border-color:var(--brand);box-shadow:0 0
   background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;font-weight:600;
   opacity:0;pointer-events:none;transition:.25s;z-index:20;max-width:90%}
 #toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* v2 additions */
+.bar .iconbtn{text-decoration:none;white-space:nowrap}
+.btn.wa{background:#25d366;color:#06310f}
+input:disabled{opacity:.65}
+.weeknav{display:flex;align-items:center;justify-content:space-between;text-align:center;margin-bottom:14px}
+.weeknav small{color:var(--muted)}
+.navbtn{color:var(--ink);background:var(--card);border:1px solid var(--line);min-width:44px;min-height:44px}
+.navbtn[disabled]{opacity:.35}
+.stat.good b{color:var(--ok)}
+.stat.bad b{color:var(--bad)}
