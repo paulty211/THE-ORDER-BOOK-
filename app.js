@@ -38,6 +38,8 @@
   const parseDay = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
   const fmtDate = s => parseDay(s).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
   const fmtShort = s => parseDay(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  const fmtTime = tm => tm ? new Date(2000, 0, 1, +tm.slice(0, 2), +tm.slice(3, 5)).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
+  const withTime = (label, o) => o.time ? `${label} · ${fmtTime(o.time)}` : label;
   const paid = o => o.payments.reduce((t, p) => t + p.amount, 0);
   const balance = o => Math.max(0, +(o.amount - paid(o)).toFixed(2));
   const clip = (s, n) => s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s;
@@ -50,9 +52,9 @@
     if (o.status === 'completed') return { cls: 'done', label: t('deliveredBadge') };
     const d = daysUntil(o.due);
     if (d < 0) return { cls: 'overdue', label: t('late', -d) };
-    if (d === 0) return { cls: 'today', label: t('today') };
-    if (d === 1) return { cls: 'soon', label: t('tomorrow') };
-    if (d <= 3) return { cls: 'soon', label: t('inDays', d) };
+    if (d === 0) return { cls: 'today', label: withTime(t('today'), o) };
+    if (d === 1) return { cls: 'soon', label: withTime(t('tomorrow'), o) };
+    if (d <= 3) return { cls: 'soon', label: withTime(t('inDays', d), o) };
     return { cls: '', label: fmtDate(o.due) };
   }
   const shell = (title, body, { back = false, extra = '' } = {}) => {
@@ -122,7 +124,7 @@
         .filter(o => !q || (o.name + ' ' + o.item).toLowerCase().includes(q));
       list.sort(tab === 'completed'
         ? (a, b) => (b.completedAt || '').localeCompare(a.completedAt || '')
-        : (a, b) => a.due.localeCompare(b.due) || a.createdAt.localeCompare(b.createdAt));
+        : (a, b) => a.due.localeCompare(b.due) || (a.time || '99:99').localeCompare(b.time || '99:99') || a.createdAt.localeCompare(b.createdAt));
       $('#list').innerHTML = list.length ? list.map(o => {
         const di = dueInfo(o), bal = balance(o);
         return `<li><a class="order ${di.cls}" href="#/order/${o.id}">
@@ -143,7 +145,7 @@
   function formScreen(editId) {
     const o = editId ? orders.find(x => x.id === editId) : null;
     if (editId && !o) { location.hash = '#/'; return; }
-    const v = o || { name: '', phone: '', item: '', amount: '', due: '' };
+    const v = o || { name: '', phone: '', item: '', amount: '', due: '', time: '' };
     shell(o ? t('editTitle') : t('addTitle'), `
       <form id="f" novalidate>
         <label>${t('custName')}
@@ -162,6 +164,8 @@
         <div class="balance"><span>${t('balanceBox')}</span><b id="bal">${money(o ? balance(o) : 0)}</b></div>
         <label>${t('collection')} <small>${t('collectionHint')}</small>
           <input name="due" type="date" required ${o ? '' : `min="${todayStr()}"`} value="${esc(v.due)}"></label>
+        <label>${t('dueTime')} <small>${t('dueTimeHint')}</small>
+          <input name="time" type="time" value="${esc(v.time || '')}"></label>
         <div class="err" id="err" role="alert"></div>
         <button class="btn" type="submit">${o ? t('saveChanges') : t('saveOrder')}</button>
         <a class="btn secondary" href="${o ? '#/order/' + o.id : '#/'}">${t('cancel')}</a>
@@ -186,11 +190,11 @@
       if (o && amount < already) return fail(t('eBelowPaid', money(already)));
       if (!due) return fail(t('eDate'));
       if (o) {
-        Object.assign(o, { name, item, amount, due, phone: f.phone.value.trim() });
+        Object.assign(o, { name, item, amount, due, time: f.time.value, phone: f.phone.value.trim() });
         save(); toast(t('tChangesSaved')); location.hash = '#/order/' + o.id;
       } else {
         const now = new Date().toISOString();
-        orders.push({ id: uid(), name, phone: f.phone.value.trim(), item, amount, due, status: 'pending', createdAt: now,
+        orders.push({ id: uid(), name, phone: f.phone.value.trim(), item, amount, due, time: f.time.value, status: 'pending', createdAt: now,
           payments: dep > 0 ? [{ amount: dep, date: now, note: 'Deposit' }] : [] });
         save(); tab = 'pending'; toast(t('tOrderSaved')); location.hash = '#/';
       }
@@ -212,7 +216,7 @@
     const bal = balance(o), what = clip(o.item, 70), sign = settings.biz ? `\n– ${settings.biz}` : '';
     const text = (kind === 'ready'
       ? t('msgReady', o.name, what, bal ? money(bal) : '')
-      : t('msgDue', o.name, money(bal), what, o.status === 'completed' ? '' : fmtDate(o.due))) + sign;
+      : t('msgDue', o.name, money(bal), what, o.status === 'completed' ? '' : fmtDate(o.due) + (o.time ? ' at ' + fmtTime(o.time) : ''))) + sign;
     window.open(`https://wa.me/${n}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   }
 
@@ -228,7 +232,7 @@
         ${o.phone ? `<a href="tel:${esc(o.phone)}" class="chip" style="text-decoration:none;display:inline-block">📞 ${esc(o.phone)}</a>` : ''}
         <h2 style="margin-top:14px">${t('orderDetails')}</h2>
         <p class="notes">${esc(o.item)}</p>
-        <div class="kv" style="margin-top:10px"><span>${t('collection')}</span><b>${fmtDate(o.due)}</b></div>
+        <div class="kv" style="margin-top:10px"><span>${t('collection')}</span><b>${fmtDate(o.due)}${o.time ? ' · ' + fmtTime(o.time) : ''}</b></div>
       </div>
 
       <div class="card">
@@ -447,7 +451,7 @@
         if (!Array.isArray(list)) throw 0;
         const clean = list.filter(o => o && typeof o.id === 'string' && typeof o.name === 'string' && typeof o.item === 'string'
           && Number.isFinite(o.amount) && /^\d{4}-\d{2}-\d{2}$/.test(o.due) && Array.isArray(o.payments))
-          .map(o => ({ id: o.id, name: o.name, phone: String(o.phone || ''), item: o.item, amount: o.amount, due: o.due,
+          .map(o => ({ id: o.id, name: o.name, phone: String(o.phone || ''), item: o.item, amount: o.amount, due: o.due, ...(/^\d{2}:\d{2}$/.test(o.time || '') ? { time: o.time } : {}),
             status: o.status === 'completed' ? 'completed' : 'pending', createdAt: String(o.createdAt || new Date().toISOString()),
             ...(o.completedAt ? { completedAt: String(o.completedAt) } : {}),
             payments: o.payments.filter(p => p && Number.isFinite(p.amount)).map(p => ({ amount: p.amount, date: String(p.date || new Date().toISOString()), note: String(p.note || 'Payment') })) }));
