@@ -11,10 +11,15 @@
     try { s = JSON.parse(localStorage.getItem(SET_KEY)); } catch {}
     try { old = localStorage.getItem(OLD_CUR_KEY); } catch {}
     // First time opening the app: start with Nigeria settings (₦ and country code 234).
-    const out = { currency: old !== null ? old : '₦', cc: s ? '' : '234', biz: '', bizInfo: '', lastBackup: '', lang: 'en', welcomed: false, ...(s || {}) };
+    const out = { currency: old !== null ? old : '₦', cc: s ? '' : '234', biz: '', owner: '', type: '', bizPhone: '', address: '', email: '', regNo: '', registeredAt: '', bizId: '', regDismiss: false,
+      lastBackup: '', lang: 'en', welcomed: false, ...(s || {}) };
+    if (out.bizInfo && !out.address) out.address = out.bizInfo;   // older versions kept one free-text line
     if (out.currency.trim() === '#') out.currency = '₦';   // people often type # for Naira
     return out;
   };
+  const PROFILE_KEYS = ['currency', 'cc', 'biz', 'owner', 'type', 'bizPhone', 'address', 'email', 'regNo', 'registeredAt', 'bizId'];
+  const isRegistered = () => !!(settings.biz && settings.owner && settings.type && settings.bizPhone && settings.registeredAt);
+  const bizLine = () => [settings.address, settings.bizPhone, settings.regNo ? 'RC ' + settings.regNo : ''].filter(Boolean).join(' · ');
   const saveSettings = () => { try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch {} };
   let orders = load();
   let settings = loadSettings();
@@ -67,7 +72,7 @@
   }
   const navBar = active => `<nav class="tabbar">${[
     ['orders', '#/', '📒', t('navOrders')], ['customers', '#/customers', '👥', t('navCustomers')],
-    ['report', '#/report', '📊', t('navReport')], ['more', '#/more', '⚙️', t('navSettings')]
+    ['report', '#/report', '📊', t('navReport')], ['more', '#/more', '🏪', t('navSettings')]
   ].map(([k, h, i, l]) => `<a href="${h}" class="${k === active ? 'on' : ''}"${k === active ? ' aria-current="page"' : ''}><span>${i}</span>${l}</a>`).join('')}</nav>`;
   const shell = (title, body, { back = false, extra = '', nav = '' } = {}) => {
     $('#app').innerHTML = `
@@ -212,6 +217,7 @@
     };
     const st = stats();
     shell(`THE ORDER BOOK<span class="sub">TOB</span>`, `
+      ${!isRegistered() && !settings.regDismiss ? `<div class="regbanner"><span>🏪 ${t('bannerReg')}</span><a class="btn small" href="#/more">${t('bannerBtn')}</a><button class="iconbtn" id="regx" aria-label="Close">✕</button></div>` : ''}
       <div class="summary">
         <div class="stat"><b id="s-n">${st.n}</b><span id="s-lbl">${t('ordersToDeliver')}${st.dueSoon ? t('dueOrLate', st.dueSoon) : ''}</span></div>
         <div class="stat"><b id="s-owed">${money(st.owed)}</b><span>${t('moneyOwed')}</span></div>
@@ -235,6 +241,7 @@
       $('#list').innerHTML = list.length ? list.map(orderCard).join('') : `<li class="empty"><big>${q ? '🔍' : tab === 'pending' ? '📒' : '✅'}</big>${
         q ? t('noMatch') : tab === 'pending' ? t('emptyTo') : t('emptyDone')}</li>`;
     };
+    const rx = $('#regx'); if (rx) rx.addEventListener('click', () => { settings.regDismiss = true; saveSettings(); ordersScreen(); });
     renderList();
     // Live refresh: update badges, colours and counts in place (no scroll jump, search box untouched).
     liveRefresh = () => {
@@ -425,7 +432,7 @@
       <article class="receipt" id="receipt">
         <header class="rc-head">
           <b class="rc-biz">${esc(biz)}</b>
-          ${settings.bizInfo ? `<span>${esc(settings.bizInfo)}</span>` : ''}
+          ${bizLine() ? `<span>${esc(bizLine())}</span>` : ''}
         </header>
         <div class="rc-title">${t('receipt').toUpperCase()}</div>
         <div class="rc-meta"><span>${t('receiptNo')} <b>${no}</b></span><span>${t('receiptDate')}: <b>${issued}</b></span></div>
@@ -495,7 +502,7 @@
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, 4000);
     y = P;
     center(m.biz, 32, 800, G, 4);
-    if (settings.bizInfo) center(settings.bizInfo, 17, 400, '#555', 4);
+    if (bizLine()) center(bizLine(), 17, 400, '#555', 4);
     y += 6; rule('#cfc9bb', 2, [8, 6]); y += 4;
     center(t('receipt').toUpperCase().split('').join(' '), 20, 800, G, 8);
     row(`${t('receiptNo')} ${m.no}`, `${t('receiptDate')}: ${m.issued}`, 15, 400, '#555', 6);
@@ -543,60 +550,82 @@
     return new Blob(parts, { type: 'application/pdf' });
   }
 
-  /* ---------- Weekly report ---------- */
-  let weekOffset = 0;
+  /* ---------- Reports (weekly + monthly) ---------- */
+  let reportMode = 'week', weekOffset = 0, monthOffset = 0;
   function reportScreen() {
-    const ws = new Date(); ws.setHours(0, 0, 0, 0);
-    ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7) + weekOffset * 7); // weeks start on Monday
-    const we = new Date(ws); we.setDate(we.getDate() + 6);
-    const a = ymd(ws), b = ymd(we), inWeek = iso => { const d = ymd(new Date(iso)); return d >= a && d <= b; };
+    const M = reportMode === 'month', off = M ? monthOffset : weekOffset;
+    let start, end;
+    if (M) { const n = new Date(); start = new Date(n.getFullYear(), n.getMonth() + monthOffset, 1); end = new Date(start.getFullYear(), start.getMonth() + 1, 0); }
+    else { start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - ((start.getDay() + 6) % 7) + weekOffset * 7); end = new Date(start); end.setDate(end.getDate() + 6); } // weeks start on Monday
+    const a = ymd(start), b = ymd(end), inRange = iso => { const d = ymd(new Date(iso)); return d >= a && d <= b; };
 
     const pays = [];
-    orders.forEach(o => o.payments.forEach(p => { if (inWeek(p.date)) pays.push({ ...p, name: o.name }); }));
+    orders.forEach(o => o.payments.forEach(p => { if (inRange(p.date)) pays.push({ ...p, name: o.name, key: o.id }); }));
     pays.sort((x, y) => y.date.localeCompare(x.date));
-    const received = pays.reduce((t, p) => t + p.amount, 0);
+    const received = pays.reduce((s, p) => s + p.amount, 0);
     const pending = orders.filter(o => o.status !== 'completed');
-    const owed = pending.reduce((t, o) => t + balance(o), 0);
+    const owed = pending.reduce((s, o) => s + balance(o), 0);
     const owing = pending.filter(o => balance(o) > 0).length;
-    const dueWeek = pending.filter(o => o.due >= a && o.due <= b).sort((x, y) => x.due.localeCompare(y.due));
-    const dueWeekBal = dueWeek.reduce((t, o) => t + balance(o), 0);
+    const dueIn = pending.filter(o => o.due >= a && o.due <= b).sort((x, y) => x.due.localeCompare(y.due) || (x.time || '99:99').localeCompare(y.time || '99:99'));
+    const dueInBal = dueIn.reduce((s, o) => s + balance(o), 0);
     const overdue = pending.filter(o => isLate(o) && balance(o) > 0);
-    const newCount = orders.filter(o => inWeek(o.createdAt)).length;
-    const doneCount = orders.filter(o => o.completedAt && inWeek(o.completedAt)).length;
-    const range = `${fmtShort(a)} – ${fmtShort(b)}`;
-    const title = weekOffset === 0 ? t('thisWeek') : weekOffset === -1 ? t('lastWeek') : t('weeksAgo', -weekOffset);
+    const newCount = orders.filter(o => inRange(o.createdAt)).length;
+    const doneCount = orders.filter(o => o.completedAt && inRange(o.completedAt)).length;
+    const range = M ? start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : `${fmtShort(a)} – ${fmtShort(b)}`;
+    const title = off === 0 ? t(M ? 'thisMonth' : 'thisWeek') : off === -1 ? t(M ? 'lastMonth' : 'lastWeek') : t(M ? 'monthsAgo' : 'weeksAgo', -off);
 
-    shell(t('reportTitle'), `
+    // Monthly extras: money received per week, and top customers
+    let extras = '';
+    if (M) {
+      const byWeek = new Map();
+      pays.forEach(p => { const d = new Date(p.date); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); const k = ymd(d); byWeek.set(k, (byWeek.get(k) || 0) + p.amount); });
+      const weeks = []; const w = new Date(start); w.setDate(w.getDate() - ((w.getDay() + 6) % 7));
+      while (ymd(w) <= b) { weeks.push([ymd(w), byWeek.get(ymd(w)) || 0]); w.setDate(w.getDate() + 7); }
+      const max = Math.max(1, ...weeks.map(x => x[1]));
+      const byCust = new Map();
+      pays.forEach(p => { const c = customers().find(x => x.orders.some(o => o.id === p.key)); const k = c ? c.key : p.name; const e = byCust.get(k) || { name: c ? c.name : p.name, sum: 0 }; e.sum += p.amount; byCust.set(k, e); });
+      const top = [...byCust.values()].sort((x, y) => y.sum - x.sum).slice(0, 5);
+      extras = `<div class="card"><h2>${t('byWeek')}</h2>${weeks.map(([k, v]) => `<div class="bar-row"><span>${t('weekOf', fmtShort(k))}</span><b>${money(v)}</b><i style="width:${Math.round(v / max * 100)}%"></i></div>`).join('')}</div>
+        ${top.length ? `<div class="card"><h2>${t('topCust')}</h2><ul class="hist" style="margin-top:0">${top.map((c, i) => `<li><span>${i + 1}. ${esc(c.name)}</span><b>${money(c.sum)}</b></li>`).join('')}</ul></div>` : ''}`;
+    }
+
+    shell(t(M ? 'reportTitleM' : 'reportTitle'), `
+      <div class="tabs" role="tablist">
+        <button role="tab" data-mode="week" aria-selected="${!M}">${t('tabWeekly')}</button>
+        <button role="tab" data-mode="month" aria-selected="${M}">${t('tabMonthly')}</button>
+      </div>
       <div class="weeknav">
-        <button class="iconbtn navbtn" id="prev" aria-label="${t('prevAria')}">◀</button>
-        <div><b>${weekOffset > 0 ? t('nextWeek') : title}</b><br><small>${range}</small></div>
-        <button class="iconbtn navbtn" id="next" aria-label="${t('nextAria')}" ${weekOffset >= 0 ? 'disabled' : ''}>▶</button>
+        <button class="iconbtn navbtn" id="prev" aria-label="${t(M ? 'prevAriaM' : 'prevAria')}">◀</button>
+        <div><b>${title}</b><br><small>${range}</small></div>
+        <button class="iconbtn navbtn" id="next" aria-label="${t(M ? 'nextAriaM' : 'nextAria')}" ${off >= 0 ? 'disabled' : ''}>▶</button>
       </div>
       <div class="summary">
         <div class="stat good"><b>${money(received)}</b><span>${t('received')}</span></div>
         <div class="stat bad"><b>${money(owed)}</b><span>${t('stillOwed', owing)}</span></div>
       </div>
       <div class="card">
-        <h2>${t('short')}</h2>
+        <h2>${t(M ? 'shortM' : 'short')}</h2>
         <div class="kv"><span>${t('newOrders')}</span><b>${newCount}</b></div>
         <div class="kv"><span>${t('deliveredN')}</span><b>${doneCount}</b></div>
-        <div class="kv"><span>${t('dueWeek')}</span><b>${dueWeek.length}${dueWeekBal ? t('toCollect', money(dueWeekBal)) : ''}</b></div>
+        <div class="kv"><span>${t(M ? 'dueMonth' : 'dueWeek')}</span><b>${dueIn.length}${dueInBal ? t('toCollect', money(dueInBal)) : ''}</b></div>
         <div class="kv"><span>${t('lateOwing')}</span><b>${overdue.length}</b></div>
       </div>
+      ${extras}
       <div class="card">
         <h2>${t('paymentsRecv')}</h2>
         ${pays.length ? `<ul class="hist" style="margin-top:0">${pays.map(p =>
           `<li><span>${esc(p.name)} · ${esc(noteLabel(p.note || 'Payment'))} · ${fmtShort(ymd(new Date(p.date)))}</span><b>${money(p.amount)}</b></li>`).join('')}</ul>`
-          : `<p style="margin:0;color:var(--muted)">${t('noPay')}</p>`}
+          : `<p style="margin:0;color:var(--muted)">${t(M ? 'noPayM' : 'noPay')}</p>`}
       </div>
-      ${dueWeek.length ? `<div class="card"><h2>${t('deliverThisWeek')}</h2><ul class="hist" style="margin-top:0">${dueWeek.map(o =>
+      ${dueIn.length ? `<div class="card"><h2>${t(M ? 'deliverThisMonth' : 'deliverThisWeek')}</h2><ul class="hist" style="margin-top:0">${dueIn.map(o =>
         `<li><a href="#/order/${o.id}" style="color:inherit;text-decoration:none;flex:1">${esc(o.name)} · ${fmtShort(o.due)}</a><b>${balance(o) ? t('owedSuffix', money(balance(o))) : t('paidShort')}</b></li>`).join('')}</ul></div>` : ''}
       <button class="btn secondary" id="share">${t('share')}</button>`, { nav: 'report' });
 
-    $('#prev').addEventListener('click', () => { weekOffset--; reportScreen(); });
-    $('#next').addEventListener('click', () => { if (weekOffset < 0) { weekOffset++; reportScreen(); } });
+    document.querySelectorAll('[data-mode]').forEach(x => x.addEventListener('click', () => { reportMode = x.dataset.mode; reportScreen(); }));
+    $('#prev').addEventListener('click', () => { if (M) monthOffset--; else weekOffset--; reportScreen(); });
+    $('#next').addEventListener('click', () => { if (off < 0) { if (M) monthOffset++; else weekOffset++; reportScreen(); } });
     $('#share').addEventListener('click', async () => {
-      const text = t('shareText', settings.biz || 'THE ORDER BOOK', range, money(received), money(owed), owing, newCount, doneCount);
+      const text = t(M ? 'shareTextM' : 'shareText', settings.biz || 'THE ORDER BOOK', range, money(received), money(owed), owing, newCount, doneCount);
       try {
         if (navigator.share) await navigator.share({ text });
         else { await navigator.clipboard.writeText(text); toast(t('copied')); }
@@ -646,18 +675,38 @@
   /* ---------- More: settings, backup & restore ---------- */
   function moreScreen() {
     const lb = settings.lastBackup ? new Date(settings.lastBackup).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : t('never');
-    shell(t('settingsTitle'), `
+    const reg = isRegistered(), since = settings.registeredAt ? new Date(settings.registeredAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    const TYPES = ['food', 'fashion', 'beauty', 'events', 'print', 'repair', 'cleaning', 'retail', 'other'];
+    shell(t('bizTitle'), `
       <div class="card">
-        <h2>${t('language')}</h2>
-        ${langPicker()}
+        <h2>${reg ? t('regTitleDone') : t('regTitle')}</h2>
+        ${reg ? `<div class="regbadge"><b>✓ ${t('regStatusYes')}</b><span>${t('regId')}: <b>${esc(settings.bizId)}</b> · ${t('regSince')} ${since}</span></div>`
+              : `<p class="reghint">${t('regStatusNo')}</p>`}
+        <form id="rf" style="gap:12px" novalidate>
+          <label>${t('bizNameStar')} <small>${t('bizHint')}</small>
+            <input name="biz" maxlength="60" value="${esc(settings.biz)}" placeholder="${t('bizPh')}" autocomplete="organization"></label>
+          <label>${t('ownerName')}
+            <input name="owner" maxlength="60" value="${esc(settings.owner)}" autocapitalize="words" autocomplete="name"></label>
+          <label>${t('bizType')}
+            <select name="type"><option value="">${t('typePick')}</option>${TYPES.map(k => `<option value="${k}" ${settings.type === k ? 'selected' : ''}>${t('type_' + k)}</option>`).join('')}</select></label>
+          <label>${t('bizPhone')}
+            <input name="bizPhone" type="tel" maxlength="30" value="${esc(settings.bizPhone)}" placeholder="e.g. 0803 123 4567" autocomplete="tel"></label>
+          <label>${t('bizAddress')}
+            <input name="address" maxlength="120" value="${esc(settings.address)}" placeholder="${t('bizAddressPh')}" autocomplete="street-address"></label>
+          <label>${t('email')}
+            <input name="email" type="email" maxlength="80" value="${esc(settings.email)}" placeholder="name@example.com" autocomplete="email"></label>
+          <label>${t('regNo')} <small>${t('regNoHint')}</small>
+            <input name="regNo" maxlength="30" value="${esc(settings.regNo)}" placeholder="e.g. 1234567"></label>
+          <div class="err" id="rerr" role="alert"></div>
+          <button class="btn" type="submit">${reg ? t('saveProfile') : t('registerBtn')}</button>
+          <p class="reghint" style="margin:0">${t('regHint')}</p>
+        </form>
       </div>
       <div class="card">
-        <h2>${t('settingsTitle')}</h2>
-        <form id="sf" style="gap:12px" novalidate>
-          <label>${t('bizName')} <small>${t('bizHint')}</small>
-            <input name="biz" maxlength="60" value="${esc(settings.biz)}" placeholder="${t('bizPh')}"></label>
-          <label>${t('bizInfo')} <small>${t('bizInfoHint')}</small>
-            <input name="bizInfo" maxlength="120" value="${esc(settings.bizInfo)}" placeholder="${t('bizInfoPh')}"></label>
+        <h2>${t('prefsTitle')}</h2>
+        <p style="margin:0 0 8px;font-weight:600;font-size:14px">${t('language')}</p>
+        ${langPicker()}
+        <form id="sf" style="gap:12px;margin-top:14px" novalidate>
           <label>${t('moneySign')} <small>${t('moneyHint')}</small>
             <input name="currency" maxlength="5" value="${esc(settings.currency)}" placeholder="₦"></label>
           <label>${t('cc')} <small>${t('ccHint')}</small>
@@ -677,13 +726,21 @@
       <p style="text-align:center"><a href="#/welcome" class="chip" style="text-decoration:none;display:inline-block">${t('showWelcome')}</a></p>`, { nav: 'more' });
     bindLang(moreScreen);
 
+    $('#rf').addEventListener('submit', e => {
+      e.preventDefault(); const f = e.target, v = k => f[k].value.trim();
+      if (!v('biz') || !v('owner') || !f.type.value || !v('bizPhone')) { $('#rerr').textContent = t('eReg'); return; }
+      const first = !settings.registeredAt;
+      Object.assign(settings, { biz: v('biz'), owner: v('owner'), type: f.type.value, bizPhone: v('bizPhone'), address: v('address'), email: v('email'), regNo: v('regNo') });
+      if (first) { settings.registeredAt = new Date().toISOString(); settings.bizId = 'TOB-' + Math.random().toString(36).slice(2, 7).toUpperCase(); }
+      saveSettings(); toast(t(first ? 'tRegistered' : 'tProfileSaved')); moreScreen();
+    });
     $('#sf').addEventListener('submit', e => {
       e.preventDefault(); const f = e.target;
-      settings.biz = f.biz.value.trim(); settings.bizInfo = f.bizInfo.value.trim(); settings.currency = f.currency.value.trim().replace(/^#$/, '₦');
-      settings.cc = f.cc.value.replace(/\D/g, ''); saveSettings(); toast(t('tSettingsSaved')); location.hash = '#/';
+      settings.currency = f.currency.value.trim().replace(/^#$/, '₦'); settings.cc = f.cc.value.replace(/\D/g, '');
+      saveSettings(); toast(t('tSettingsSaved')); moreScreen();
     });
     $('#bk').addEventListener('click', () => {
-      const data = JSON.stringify({ app: 'THE ORDER BOOK', version: 1, exportedAt: new Date().toISOString(), settings: { currency: settings.currency, cc: settings.cc, biz: settings.biz, bizInfo: settings.bizInfo }, orders }, null, 2);
+      const data = JSON.stringify({ app: 'THE ORDER BOOK', version: 1, exportedAt: new Date().toISOString(), settings: Object.fromEntries(PROFILE_KEYS.map(k => [k, settings[k]])), orders }, null, 2);
       const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
       const a = Object.assign(document.createElement('a'), { href: url, download: `tob-backup-${todayStr()}.json` });
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
@@ -706,7 +763,7 @@
         if (!confirm(t('cRestore', clean.length))) return;
         const map = new Map(orders.map(o => [o.id, o])); clean.forEach(o => map.set(o.id, o));
         orders = [...map.values()]; save();
-        if (data.settings) { settings = { ...settings, ...['currency', 'cc', 'biz', 'bizInfo'].reduce((r, k) => (typeof data.settings[k] === 'string' ? (r[k] = data.settings[k], r) : r), {}) }; saveSettings(); }
+        if (data.settings) { settings = { ...settings, ...PROFILE_KEYS.reduce((r, k) => (typeof data.settings[k] === 'string' ? (r[k] = data.settings[k], r) : r), {}) }; saveSettings(); }
         toast(t('tRestored')); location.hash = '#/';
       } catch { toast(t('tBadFile')); }
       e.target.value = '';

@@ -197,3 +197,18 @@ main.withnav{padding-bottom:calc(env(safe-area-inset-bottom) + 150px)}
 .sect{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:18px 0 10px}
 .hint{margin:0;text-align:center;color:var(--muted);font-size:13px}
 .order.cust .what{white-space:normal}
+
+/* v6: registration, monthly report */
+.regbadge{display:flex;flex-direction:column;gap:2px;background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:10px 14px;margin-bottom:14px}
+.regbadge span{font-size:13px}
+.reghint{color:var(--muted);font-size:13px;margin:0 0 12px}
+.regbanner{display:flex;align-items:center;gap:10px;background:var(--soon-bg);border:1px solid var(--accent);border-radius:var(--radius);
+  padding:10px 10px 10px 14px;margin-bottom:14px;font-size:14px;font-weight:600}
+.regbanner span{flex:1}
+.regbanner .btn{background:var(--brand);color:var(--brand-ink);padding:9px 14px;min-height:40px}
+.regbanner .iconbtn{color:var(--muted);padding:6px 8px}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 20px) 50%,calc(100% - 14px) 50%;background-size:6px 6px;background-repeat:no-repeat;padding-right:36px}
+.bar-row{position:relative;display:flex;justify-content:space-between;gap:10px;padding:8px 0 12px;font-size:14px}
+.bar-row span{color:var(--muted)}
+.bar-row i{position:absolute;left:0;bottom:3px;height:5px;border-radius:3px;background:var(--brand);opacity:.85;min-width:2px}
