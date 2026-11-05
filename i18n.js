@@ -25,7 +25,7 @@ window.TOB_STRINGS = {
     emptyTo: 'No orders yet.<br>Tap “Add order” to write your first one.',
     emptyDone: 'No delivered orders yet.',
     noMatch: 'No matching orders.',
-    late: n => `${n} day${n === 1 ? '' : 's'} late`, today: 'Due today', tomorrow: 'Tomorrow', inDays: n => `In ${n} days`,
+    late: n => `${n} day${n === 1 ? '' : 's'} late`, lateHours: n => `${n} hour${n === 1 ? '' : 's'} late`, lateMins: n => `${n} min late`, today: 'Due today', tomorrow: 'Tomorrow', inDays: n => `In ${n} days`,
     deliveredBadge: 'Delivered',
     // Form
     addTitle: 'Add Order', editTitle: 'Edit Order',
@@ -113,7 +113,7 @@ window.TOB_STRINGS = {
     emptyTo: 'No order yet.<br>Press “Add order” to write your first one.',
     emptyDone: 'Nobody don collect yet.',
     noMatch: 'We no see any order like that.',
-    late: n => `Don late ${n} day${n === 1 ? '' : 's'}`, today: 'Today na the day', tomorrow: 'Tomorrow', inDays: n => `Inside ${n} days`,
+    late: n => `Don late ${n} day${n === 1 ? '' : 's'}`, lateHours: n => `Don late ${n} hour${n === 1 ? '' : 's'}`, lateMins: n => `Don late ${n} min`, today: 'Today na the day', tomorrow: 'Tomorrow', inDays: n => `Inside ${n} days`,
     deliveredBadge: 'Don collect',
     addTitle: 'Add Order', editTitle: 'Change Order',
     custName: 'Customer name', custNamePh: 'e.g. Mrs. Adeyemi',

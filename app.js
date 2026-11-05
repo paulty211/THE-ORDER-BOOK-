@@ -40,6 +40,10 @@
   const fmtShort = s => parseDay(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   const fmtTime = tm => tm ? new Date(2000, 0, 1, +tm.slice(0, 2), +tm.slice(3, 5)).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
   const withTime = (label, o) => o.time ? `${label} · ${fmtTime(o.time)}` : label;
+  // Exact moment the order is due (only when a time was set), and how long ago it passed.
+  const dueAt = o => { if (!o.time) return null; const [y, m, d] = o.due.split('-').map(Number); return new Date(y, m - 1, d, +o.time.slice(0, 2), +o.time.slice(3, 5)); };
+  const minsLate = o => { const at = dueAt(o); return at ? Math.floor((Date.now() - at) / 60000) : -1; };   // > 0 once the time has passed
+  const isLate = o => o.status !== 'completed' && (o.time ? minsLate(o) > 0 : daysUntil(o.due) < 0);
   const paid = o => o.payments.reduce((t, p) => t + p.amount, 0);
   const balance = o => Math.max(0, +(o.amount - paid(o)).toFixed(2));
   const clip = (s, n) => s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s;
@@ -50,7 +54,11 @@
   }
   function dueInfo(o) {
     if (o.status === 'completed') return { cls: 'done', label: t('deliveredBadge') };
-    const d = daysUntil(o.due);
+    const d = daysUntil(o.due), lm = minsLate(o);
+    if (o.time && lm > 0) {   // a time was set: count lateness by the minute / hour
+      const hrs = Math.floor(lm / 60);
+      return { cls: 'overdue', label: lm < 60 ? t('lateMins', lm) : hrs < 24 ? t('lateHours', hrs) : t('late', Math.floor(hrs / 24)) };
+    }
     if (d < 0) return { cls: 'overdue', label: t('late', -d) };
     if (d === 0) return { cls: 'today', label: withTime(t('today'), o) };
     if (d === 1) return { cls: 'soon', label: withTime(t('tomorrow'), o) };
@@ -103,7 +111,7 @@
   function ordersScreen() {
     const pending = orders.filter(o => o.status !== 'completed');
     const owed = pending.reduce((t, o) => t + balance(o), 0);
-    const dueSoon = pending.filter(o => daysUntil(o.due) <= 0).length;
+    const dueSoon = pending.filter(o => daysUntil(o.due) <= 0 || isLate(o)).length;
     shell(`THE ORDER BOOK<span class="sub">TOB</span>`, `
       <div class="summary">
         <div class="stat"><b>${pending.length}</b><span>${t('ordersToDeliver')}${dueSoon ? t('dueOrLate', dueSoon) : ''}</span></div>
@@ -315,7 +323,7 @@
     const owing = pending.filter(o => balance(o) > 0).length;
     const dueWeek = pending.filter(o => o.due >= a && o.due <= b).sort((x, y) => x.due.localeCompare(y.due));
     const dueWeekBal = dueWeek.reduce((t, o) => t + balance(o), 0);
-    const overdue = pending.filter(o => o.due < todayStr() && balance(o) > 0);
+    const overdue = pending.filter(o => isLate(o) && balance(o) > 0);
     const newCount = orders.filter(o => inWeek(o.createdAt)).length;
     const doneCount = orders.filter(o => o.completedAt && inWeek(o.completedAt)).length;
     const range = `${fmtShort(a)} – ${fmtShort(b)}`;
