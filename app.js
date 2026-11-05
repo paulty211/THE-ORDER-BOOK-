@@ -55,17 +55,35 @@
       <main>${body}</main>`;
     window.scrollTo(0, 0);
   };
-  // Examples shown in the "Order details" box – a mix of meals and other small businesses.
+  // Examples shown in the "Order details" box – food, fashion, beauty, events, print/crafts and repairs.
   const EXAMPLES = [
+    // Food
     '3 trays jollof rice + 20 puff-puff, Saturday party',
-    '2 agbada, size L – navy blue',
     'Birthday cake, 2 layers, vanilla – write “Happy 5th Ada”',
-    'Pot of egusi soup + 10 wraps of pounded yam',
-    'Full head knotless braids, medium length',
-    '50 printed T-shirts, white, size M',
-    'Fix phone screen – Samsung A12',
     '1 dozen meat pies + 2 crates of zobo drink',
-    'Wedding gele + 6 aso-ebi blouses'
+    '5 lunch boxes daily, Mon–Fri – rice and stew',
+    'Small chops for 50 guests – samosa, spring roll, chicken',
+    // Fashion
+    '2 agbada, size L – navy blue',
+    'Wedding gele + 6 aso-ebi blouses',
+    'Pair of leather sandals, size 42, brown',
+    'Ankara tote bag with zip, medium',
+    // Beauty
+    'Full head knotless braids, medium length',
+    'Bridal makeup + 2 bridesmaids, 9am',
+    'Wig revamp – bone straight, 24 inches',
+    // Events
+    'Decor for 100 guests – gold and white',
+    'Hire: 100 chairs + 4 canopies, Saturday',
+    // Print & crafts
+    '50 printed T-shirts, white, size M',
+    '200 flyers + 1 banner (6ft x 3ft)',
+    'Dining table, 6 seats, mahogany',
+    // Repairs & services
+    'Fix phone screen – Samsung A12',
+    'Wash and iron 3 suits + 2 duvets',
+    'Fix generator – won’t start',
+    'Bouquet of 12 roses, red, with card'
   ];
   const example = () => EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
 
@@ -125,7 +143,7 @@
           <input name="phone" type="tel" maxlength="30" placeholder="e.g. 0803 123 4567" value="${esc(v.phone)}"></label>
         <label>Order details
           <textarea name="item" required maxlength="500" placeholder="e.g. ${esc(example())}">${esc(v.item)}</textarea>
-          <small>Meals, outfits, cakes, repairs… whatever you are making or selling.</small></label>
+          <small>Meals, outfits, hair, cakes, prints, repairs… whatever you are making or selling.</small></label>
         <div class="two">
           <label>Total amount
             <input name="amount" required inputmode="decimal" placeholder="0.00" value="${o ? o.amount : ''}"></label>
