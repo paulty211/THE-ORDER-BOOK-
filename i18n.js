@@ -120,6 +120,10 @@ window.TOB_STRINGS = {
     byWeek: 'Money received by week', weekOf: d => `Week of ${d}`, topCust: 'Top customers (money received)',
     shareTextM: (biz, range, rec, owed, n, nn, dn) =>
       `${biz} – monthly report (${range})\nMoney received: ${rec}\nStill owed: ${owed} (${n} order${n === 1 ? '' : 's'})\nNew orders: ${nn} · Delivered: ${dn}`,
+    consentText: 'I agree that my business details are saved online with THE ORDER BOOK. My customers and orders stay on my phone.',
+    eConsent: 'Please tick the box to agree.',
+    cloudSynced: '☁ Saved online', cloudSyncing: '⏳ Saving online…', retry: 'Try again',
+    cloudPending: '📱 Saved on this phone. It will upload when you have internet.', cloudFail: '⚠ Could not save online yet.',
     showWelcome: 'Show welcome guide'
   },
 
@@ -237,6 +241,10 @@ window.TOB_STRINGS = {
     byWeek: 'Money wey enter by week', weekOf: d => `Week of ${d}`, topCust: 'Top customers (money wey enter)',
     shareTextM: (biz, range, rec, owed, n, nn, dn) =>
       `${biz} – monthly report (${range})\nMoney wey enter: ${rec}\nDem still owe: ${owed} (${n} order${n === 1 ? '' : 's'})\nNew orders: ${nn} · Don collect: ${dn}`,
+    consentText: 'I agree make dem save my business details online with THE ORDER BOOK. My customers and orders go still dey my phone.',
+    eConsent: 'Abeg tick the box to agree.',
+    cloudSynced: '☁ Don save online', cloudSyncing: '⏳ We dey save am online…', retry: 'Try again',
+    cloudPending: '📱 E don save for this phone. E go upload when you get internet.', cloudFail: '⚠ We never fit save am online.',
     showWelcome: 'Show welcome guide'
   }
 };

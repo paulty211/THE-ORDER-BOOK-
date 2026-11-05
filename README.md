@@ -14,3 +14,6 @@ It works offline. Data is stored only on your device (localStorage) – clearing
 
 ## Develop
 No build step: static `index.html`, `styles.css`, `app.js`, `sw.js`, `manifest.webmanifest`. Serve with any static server, e.g. `python3 -m http.server`.
+
+## Online registration (optional)
+Businesses can also be registered in one online table (Supabase). See [SETUP-CLOUD.md](SETUP-CLOUD.md). Only the business profile is uploaded; orders and customers stay on the phone.

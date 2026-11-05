@@ -1,5 +1,5 @@
-const CACHE = 'tob-v7';
-const ASSETS = ['./', 'index.html', 'styles.css', 'app.js', 'i18n.js', 'manifest.webmanifest',
+const CACHE = 'tob-v8';
+const ASSETS = ['./', 'index.html', 'styles.css', 'app.js', 'i18n.js', 'config.js', 'cloud.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

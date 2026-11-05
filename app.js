@@ -11,7 +11,7 @@
     try { s = JSON.parse(localStorage.getItem(SET_KEY)); } catch {}
     try { old = localStorage.getItem(OLD_CUR_KEY); } catch {}
     // First time opening the app: start with Nigeria settings (₦ and country code 234).
-    const out = { currency: old !== null ? old : '₦', cc: s ? '' : '234', biz: '', owner: '', type: '', bizPhone: '', address: '', email: '', regNo: '', registeredAt: '', bizId: '', regDismiss: false,
+    const out = { currency: old !== null ? old : '₦', cc: s ? '' : '234', biz: '', owner: '', type: '', bizPhone: '', address: '', email: '', regNo: '', registeredAt: '', bizId: '', regDismiss: false, consent: false, syncedHash: '', syncedAt: '',
       lastBackup: '', lang: 'en', welcomed: false, ...(s || {}) };
     if (out.bizInfo && !out.address) out.address = out.bizInfo;   // older versions kept one free-text line
     if (out.currency.trim() === '#') out.currency = '₦';   // people often type # for Naira
@@ -20,6 +20,36 @@
   const PROFILE_KEYS = ['currency', 'cc', 'biz', 'owner', 'type', 'bizPhone', 'address', 'email', 'regNo', 'registeredAt', 'bizId'];
   const isRegistered = () => !!(settings.biz && settings.owner && settings.type && settings.bizPhone && settings.registeredAt);
   const bizLine = () => [settings.address, settings.bizPhone, settings.regNo ? 'RC ' + settings.regNo : ''].filter(Boolean).join(' · ');
+  const cloud = window.TOB_CLOUD_API || { enabled: false };
+  const newBizId = () => 'TOB-' + Math.random().toString(36).slice(2, 7).toUpperCase();
+  const profileHash = () => JSON.stringify(['biz', 'owner', 'type', 'bizPhone', 'address', 'email', 'regNo', 'bizId', 'lang'].map(k => settings[k]));
+  let syncing = false, syncState = '';   // syncState: '' | 'busy' | 'fail'
+  const syncHtml = () => !cloud.enabled || !isRegistered() ? ''
+    : settings.syncedHash === profileHash() ? t('cloudSynced')
+    : syncState === 'busy' ? t('cloudSyncing')
+    : syncState === 'fail' ? `${t('cloudFail')} <button type="button" id="syncretry" class="chip">${t('retry')}</button>`
+    : t('cloudPending');
+  function paintSync() {
+    const el = $('#syncstate'); if (el) el.innerHTML = syncHtml();
+    const id = $('#bizid'); if (id) id.textContent = settings.bizId;
+  }
+  async function syncProfile() {
+    if (!cloud.enabled || !isRegistered() || syncing || settings.syncedHash === profileHash()) return;
+    if (navigator.onLine === false) { paintSync(); return; }
+    syncing = true; syncState = 'busy'; paintSync();
+    try {
+      for (let i = 0; ; i++) {
+        try {
+          await cloud.register({ code: settings.bizId, name: settings.biz, owner: settings.owner, type: settings.type, phone: settings.bizPhone,
+            address: settings.address, email: settings.email, cac: settings.regNo, lang: settings.lang, version: 'web-1' });
+          break;
+        } catch (e) { if (e.code === 'code_taken' && i < 3) { settings.bizId = newBizId(); saveSettings(); continue; } throw e; }
+      }
+      settings.syncedHash = profileHash(); settings.syncedAt = new Date().toISOString(); saveSettings(); syncState = '';
+    } catch (e) { syncState = 'fail'; }
+    syncing = false; paintSync();
+    if (!syncState && settings.syncedHash !== profileHash()) syncProfile();   // changed while uploading
+  }
   const saveSettings = () => { try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch {} };
   let orders = load();
   let settings = loadSettings();
@@ -637,7 +667,7 @@
   const langPicker = () => `<div class="langs" role="group" aria-label="Language">${
     Object.keys(window.TOB_STRINGS).map(k => `<button type="button" class="lang" data-lang="${k}" aria-pressed="${settings.lang === k}">${window.TOB_STRINGS[k].langName}</button>`).join('')}</div>`;
   const bindLang = rerender => document.querySelectorAll('.lang').forEach(b => b.addEventListener('click', () => {
-    settings.lang = b.dataset.lang; saveSettings(); document.documentElement.lang = settings.lang === 'pcm' ? 'en-NG' : 'en'; rerender();
+    settings.lang = b.dataset.lang; saveSettings(); syncProfile(); document.documentElement.lang = settings.lang === 'pcm' ? 'en-NG' : 'en'; rerender();
   }));
 
   function welcomeScreen() {
@@ -680,7 +710,7 @@
     shell(t('bizTitle'), `
       <div class="card">
         <h2>${reg ? t('regTitleDone') : t('regTitle')}</h2>
-        ${reg ? `<div class="regbadge"><b>✓ ${t('regStatusYes')}</b><span>${t('regId')}: <b>${esc(settings.bizId)}</b> · ${t('regSince')} ${since}</span></div>`
+        ${reg ? `<div class="regbadge"><b>✓ ${t('regStatusYes')}</b><span>${t('regId')}: <b id="bizid">${esc(settings.bizId)}</b> · ${t('regSince')} ${since}</span><span id="syncstate">${syncHtml()}</span></div>`
               : `<p class="reghint">${t('regStatusNo')}</p>`}
         <form id="rf" style="gap:12px" novalidate>
           <label>${t('bizNameStar')} <small>${t('bizHint')}</small>
@@ -697,6 +727,7 @@
             <input name="email" type="email" maxlength="80" value="${esc(settings.email)}" placeholder="name@example.com" autocomplete="email"></label>
           <label>${t('regNo')} <small>${t('regNoHint')}</small>
             <input name="regNo" maxlength="30" value="${esc(settings.regNo)}" placeholder="e.g. 1234567"></label>
+          ${cloud.enabled && !settings.consent ? `<label class="consent"><input type="checkbox" name="consent"><span>${t('consentText')}</span></label>` : ''}
           <div class="err" id="rerr" role="alert"></div>
           <button class="btn" type="submit">${reg ? t('saveProfile') : t('registerBtn')}</button>
           <p class="reghint" style="margin:0">${t('regHint')}</p>
@@ -729,10 +760,12 @@
     $('#rf').addEventListener('submit', e => {
       e.preventDefault(); const f = e.target, v = k => f[k].value.trim();
       if (!v('biz') || !v('owner') || !f.type.value || !v('bizPhone')) { $('#rerr').textContent = t('eReg'); return; }
+      if (cloud.enabled && !settings.consent && !f.consent.checked) { $('#rerr').textContent = t('eConsent'); return; }
+      if (cloud.enabled && !settings.consent) settings.consent = true;
       const first = !settings.registeredAt;
       Object.assign(settings, { biz: v('biz'), owner: v('owner'), type: f.type.value, bizPhone: v('bizPhone'), address: v('address'), email: v('email'), regNo: v('regNo') });
-      if (first) { settings.registeredAt = new Date().toISOString(); settings.bizId = 'TOB-' + Math.random().toString(36).slice(2, 7).toUpperCase(); }
-      saveSettings(); toast(t(first ? 'tRegistered' : 'tProfileSaved')); moreScreen();
+      if (first) { settings.registeredAt = new Date().toISOString(); settings.bizId = newBizId(); }
+      saveSettings(); toast(t(first ? 'tRegistered' : 'tProfileSaved')); moreScreen(); syncProfile();
     });
     $('#sf').addEventListener('submit', e => {
       e.preventDefault(); const f = e.target;
@@ -789,9 +822,12 @@
   const isFormRoute = () => /^#\/(add|edit\/|more|welcome)/.test(location.hash) || !settings.welcomed;
   window.addEventListener('hashchange', route);
   window.addEventListener('storage', e => { if (e.key === KEY && !isFormRoute()) { orders = load(); route(); } });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) return; if (liveRefresh) liveRefresh(); else if (!isFormRoute()) route(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) return; syncProfile(); if (liveRefresh) liveRefresh(); else if (!isFormRoute()) route(); });
   setInterval(() => { if (!document.hidden && liveRefresh) liveRefresh(); }, 30000);
   route();
+  window.addEventListener('online', syncProfile);
+  document.addEventListener('click', e => { if (e.target && e.target.id === 'syncretry') { syncState = ''; syncProfile(); } });
+  setTimeout(syncProfile, 1200);
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http'))
     navigator.serviceWorker.register('sw.js').catch(() => {});
