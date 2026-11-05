@@ -124,6 +124,7 @@ window.TOB_STRINGS = {
     eConsent: 'Please tick the box to agree.',
     cloudSynced: '☁ Saved online', cloudSyncing: '⏳ Saving online…', retry: 'Try again',
     cloudPending: '📱 Saved on this phone. It will upload when you have internet.', cloudFail: '⚠ Could not save online yet.',
+    regHintCloud: 'Your business details are saved online so there is one list of registered businesses. They also show on your receipts. Your customers and orders stay on this phone.',
     showWelcome: 'Show welcome guide'
   },
 
@@ -245,6 +246,7 @@ window.TOB_STRINGS = {
     eConsent: 'Abeg tick the box to agree.',
     cloudSynced: '☁ Don save online', cloudSyncing: '⏳ We dey save am online…', retry: 'Try again',
     cloudPending: '📱 E don save for this phone. E go upload when you get internet.', cloudFail: '⚠ We never fit save am online.',
+    regHintCloud: 'Dem go save your business details online so one list of registered businesses go dey. E go show for your receipts too. Your customers and orders go still dey this phone.',
     showWelcome: 'Show welcome guide'
   }
 };

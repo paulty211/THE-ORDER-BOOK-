@@ -730,7 +730,7 @@
           ${cloud.enabled && !settings.consent ? `<label class="consent"><input type="checkbox" name="consent"><span>${t('consentText')}</span></label>` : ''}
           <div class="err" id="rerr" role="alert"></div>
           <button class="btn" type="submit">${reg ? t('saveProfile') : t('registerBtn')}</button>
-          <p class="reghint" style="margin:0">${t('regHint')}</p>
+          <p class="reghint" style="margin:0">${t(cloud.enabled ? 'regHintCloud' : 'regHint')}</p>
         </form>
       </div>
       <div class="card">
