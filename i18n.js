@@ -92,6 +92,16 @@ window.TOB_STRINGS = {
     printBtn: '🖨 Print / Save as PDF', sendReceipt: 'Send receipt on WhatsApp', receiptCopied: 'Receipt copied',
     bizInfo: 'Business phone / address', bizInfoHint: '(shows on your receipts)', bizInfoPh: 'e.g. 12 Market Road, Ibadan · 0803 123 4567',
     noPayYet: 'No payment yet',
+    navOrders: 'Orders', navCustomers: 'Customers', navReport: 'Report', navSettings: 'Settings',
+    customersTitle: 'Customers', custTotal: 'Customers', custRepeat: 'Repeat customers', tabAll: 'All', tabRepeat: 'Repeat',
+    searchCust: 'Search customer name or phone', ordersN: n => `${n} order${n === 1 ? '' : 's'}`,
+    totalOrdered: 'Total ordered', repeatBadge: n => `⭐ Repeat · ${n} orders`, newBadge: 'New customer',
+    lastOrder: 'Last order', firstOrder: 'First order', totalPaid: 'Total paid', stillOwes: 'Still owes',
+    custDetail: 'Customer', newOrderFor: n => `+ New order for ${n}`, ordersHdr: 'Orders',
+    emptyCust: 'No customers yet.<br>They show here once you add orders.',
+    emptyRepeat: 'No repeat customers yet.<br>A customer who orders more than once shows here.',
+    sendPdf: 'Send receipt as PDF on WhatsApp', pdfHint: n => `WhatsApp will open. Choose ${n} to send the PDF.`,
+    pdfMaking: 'Making PDF…', pdfSaved: 'PDF saved. Attach it in the WhatsApp chat.', pdfFail: 'Could not make the PDF. Try again.',
     showWelcome: 'Show welcome guide'
   },
 
@@ -181,6 +191,16 @@ window.TOB_STRINGS = {
     printBtn: '🖨 Print / Save as PDF', sendReceipt: 'Send receipt for WhatsApp', receiptCopied: 'Receipt don copy',
     bizInfo: 'Business phone / address', bizInfoHint: '(e go show for your receipts)', bizInfoPh: 'e.g. 12 Market Road, Ibadan · 0803 123 4567',
     noPayYet: 'No payment yet',
+    navOrders: 'Orders', navCustomers: 'Customers', navReport: 'Report', navSettings: 'Settings',
+    customersTitle: 'Customers', custTotal: 'Customers', custRepeat: 'Customers wey dey come back', tabAll: 'All', tabRepeat: 'Regular',
+    searchCust: 'Search customer name or phone', ordersN: n => `${n} order${n === 1 ? '' : 's'}`,
+    totalOrdered: 'Total wey dem order', repeatBadge: n => `⭐ Regular · ${n} orders`, newBadge: 'New customer',
+    lastOrder: 'Last order', firstOrder: 'First order', totalPaid: 'Total wey dem don pay', stillOwes: 'E still dey owe',
+    custDetail: 'Customer', newOrderFor: n => `+ New order for ${n}`, ordersHdr: 'Orders',
+    emptyCust: 'No customer yet.<br>Dem go show here when you add orders.',
+    emptyRepeat: 'No regular customer yet.<br>Anybody wey order more than one time go show here.',
+    sendPdf: 'Send receipt as PDF for WhatsApp', pdfHint: n => `WhatsApp go open. Choose ${n} to send the PDF.`,
+    pdfMaking: 'We dey make the PDF…', pdfSaved: 'PDF don save. Attach am for the WhatsApp chat.', pdfFail: 'We no fit make the PDF. Try again.',
     showWelcome: 'Show welcome guide'
   }
 };

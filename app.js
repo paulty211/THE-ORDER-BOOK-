@@ -65,13 +65,17 @@
     if (d <= 3) return { cls: 'soon', label: withTime(t('inDays', d), o) };
     return { cls: '', label: fmtDate(o.due) };
   }
-  const shell = (title, body, { back = false, extra = '' } = {}) => {
+  const navBar = active => `<nav class="tabbar">${[
+    ['orders', '#/', '📒', t('navOrders')], ['customers', '#/customers', '👥', t('navCustomers')],
+    ['report', '#/report', '📊', t('navReport')], ['more', '#/more', '⚙️', t('navSettings')]
+  ].map(([k, h, i, l]) => `<a href="${h}" class="${k === active ? 'on' : ''}"${k === active ? ' aria-current="page"' : ''}><span>${i}</span>${l}</a>`).join('')}</nav>`;
+  const shell = (title, body, { back = false, extra = '', nav = '' } = {}) => {
     $('#app').innerHTML = `
       <header class="bar">
         ${back ? `<a class="iconbtn" href="${back === true ? '#/' : back}" aria-label="Back">←</a>` : ''}
         <h1>${title}</h1>${extra}
       </header>
-      <main>${body}</main>`;
+      <main${nav ? ' class="withnav"' : ''}>${body}</main>${nav ? navBar(nav) : ''}`;
     window.scrollTo(0, 0);
   };
   // Examples shown in the "Order details" box – food, fashion, beauty, events, print/crafts and repairs.
@@ -108,6 +112,96 @@
 
   let liveRefresh = null;   // set by the screen on show; called every minute and when the app comes back
 
+  const orderCard = o => {
+    const di = dueInfo(o), bal = balance(o);
+    return `<li><a class="order ${di.cls}" href="#/order/${o.id}">
+          <div class="row"><span class="name">${esc(o.name)}</span><span class="badge ${di.cls}">${di.label}</span></div>
+          <div class="what">${esc(o.item)}</div>
+          <div class="row"><span style="color:var(--muted);font-size:13px">${t('total', money(o.amount))}</span>
+            <span class="owing ${bal ? '' : 'clear'}">${bal ? t('owes', money(bal)) : t('paidFull')}</span></div>
+        </a></li>`;
+  };
+
+  /* ---------- customers (grouped from orders; repeat = 2+ orders) ---------- */
+  const phoneKey = p => { const d = (p || '').replace(/\D/g, ''); return d.length >= 7 ? 'p' + d.slice(-10) : ''; };
+  const nameKey = n => 'n' + n.trim().toLowerCase().replace(/\s+/g, ' ');
+  function customers() {
+    const byName = new Map();   // an order with no phone joins the phone-customer of the same name
+    orders.forEach(o => { const pk = phoneKey(o.phone); if (pk) byName.set(nameKey(o.name), pk); });
+    const m = new Map();
+    orders.forEach(o => {
+      const k = phoneKey(o.phone) || byName.get(nameKey(o.name)) || nameKey(o.name);
+      if (!m.has(k)) m.set(k, { key: k, orders: [] });
+      m.get(k).orders.push(o);
+    });
+    return [...m.values()].map(c => {
+      c.orders.sort((x, y) => y.createdAt.localeCompare(x.createdAt));
+      c.name = (c.orders.find(o => o.name.trim() !== o.name.trim().toLowerCase()) || c.orders[0]).name.trim();   // prefer the capitalised spelling
+      const withPhone = c.orders.find(o => o.phone); c.phone = withPhone ? withPhone.phone : '';
+      c.total = c.orders.reduce((s, o) => s + o.amount, 0);
+      c.paid = c.orders.reduce((s, o) => s + paid(o), 0);
+      c.owed = c.orders.reduce((s, o) => s + balance(o), 0);
+      c.last = c.orders[0].createdAt; c.first = c.orders[c.orders.length - 1].createdAt;
+      c.repeat = c.orders.length >= 2;
+      return c;
+    });
+  }
+  let prefill = null, custTab = 'all', custQuery = '';
+
+  function customersScreen() {
+    const all = customers(), rep = all.filter(c => c.repeat);
+    shell(t('customersTitle'), `
+      <div class="summary">
+        <div class="stat"><b>${all.length}</b><span>${t('custTotal')}</span></div>
+        <div class="stat good"><b>${rep.length}</b><span>${t('custRepeat')}${all.length ? ` · ${Math.round(rep.length / all.length * 100)}%` : ''}</span></div>
+      </div>
+      <div class="tabs" role="tablist">
+        <button role="tab" data-ct="all" aria-selected="${custTab === 'all'}">${t('tabAll')}</button>
+        <button role="tab" data-ct="repeat" aria-selected="${custTab === 'repeat'}">⭐ ${t('tabRepeat')}</button>
+      </div>
+      <input class="search" type="search" id="cq" placeholder="${t('searchCust')}" value="${esc(custQuery)}" autocomplete="off">
+      <ul class="list" id="clist"></ul>`, { nav: 'customers' });
+    const draw = () => {
+      const q = custQuery.trim().toLowerCase();
+      const list = (custTab === 'repeat' ? rep : all)
+        .filter(c => !q || (c.name + ' ' + c.phone).toLowerCase().includes(q))
+        .sort(custTab === 'repeat' ? (x, y) => y.orders.length - x.orders.length || y.last.localeCompare(x.last) : (x, y) => y.last.localeCompare(x.last));
+      $('#clist').innerHTML = list.length ? list.map(c => `<li><a class="order cust ${c.repeat ? 'repeat' : ''}" href="#/customer/${encodeURIComponent(c.key)}">
+          <div class="row"><span class="name">${esc(c.name)}</span>
+            <span class="badge ${c.repeat ? 'paid' : ''}">${c.repeat ? t('repeatBadge', c.orders.length) : t('newBadge')}</span></div>
+          <div class="what">${c.phone ? esc(c.phone) + ' · ' : ''}${t('ordersN', c.orders.length)} · ${t('totalOrdered')} ${money(c.total)}</div>
+          <div class="row"><span style="color:var(--muted);font-size:13px">${t('lastOrder')}: ${fmtShort(ymd(new Date(c.last)))}</span>
+            <span class="owing ${c.owed ? '' : 'clear'}">${c.owed ? t('owes', money(c.owed)) : t('paidFull')}</span></div>
+        </a></li>`).join('')
+        : `<li class="empty"><big>${q ? '🔍' : '👥'}</big>${q ? t('noMatch') : custTab === 'repeat' ? t('emptyRepeat') : t('emptyCust')}</li>`;
+    };
+    draw();
+    $('#cq').addEventListener('input', e => { custQuery = e.target.value; draw(); });
+    document.querySelectorAll('[data-ct]').forEach(b => b.addEventListener('click', () => { custTab = b.dataset.ct; customersScreen(); }));
+  }
+
+  function customerScreen(key) {
+    const c = customers().find(x => x.key === key);
+    if (!c) { location.hash = '#/customers'; return; }
+    const wa = c.phone ? waNumber(c.phone) : '';
+    shell(t('custDetail'), `
+      <div class="card">
+        <p class="big-name">${esc(c.name)}</p>
+        <p style="margin:4px 0 10px"><span class="badge ${c.repeat ? 'paid' : ''}">${c.repeat ? t('repeatBadge', c.orders.length) : t('newBadge')}</span></p>
+        ${c.phone ? `<a href="tel:${esc(c.phone)}" class="chip" style="text-decoration:none;display:inline-block">📞 ${esc(c.phone)}</a>` : ''}
+        ${wa ? `<a href="https://wa.me/${wa}" target="_blank" rel="noopener" class="chip" style="text-decoration:none;display:inline-block">💬 WhatsApp</a>` : ''}
+        <div class="kv" style="margin-top:10px"><span>${t('firstOrder')}</span><b>${fmtShort(ymd(new Date(c.first)))}</b></div>
+        <div class="kv"><span>${t('lastOrder')}</span><b>${fmtShort(ymd(new Date(c.last)))}</b></div>
+        <div class="kv"><span>${t('totalOrdered')}</span><b>${money(c.total)}</b></div>
+        <div class="kv"><span>${t('totalPaid')}</span><b>${money(c.paid)}</b></div>
+        <div class="kv total"><span>${t('stillOwes')}</span><b style="color:${c.owed ? 'var(--bad)' : 'var(--ok)'}">${c.owed ? money(c.owed) : t('paidFull')}</b></div>
+      </div>
+      <button class="btn" id="newfor">${t('newOrderFor', esc(c.name))}</button>
+      <h2 class="sect">${t('ordersHdr')} (${c.orders.length})</h2>
+      <ul class="list">${c.orders.map(orderCard).join('')}</ul>`, { back: '#/customers' });
+    $('#newfor').addEventListener('click', () => { prefill = { name: c.name, phone: c.phone }; location.hash = '#/add'; });
+  }
+
   /* ---------- screen 1: Orders ---------- */
   let tab = 'pending', query = '';
   function ordersScreen() {
@@ -129,7 +223,7 @@
       <input class="search" type="search" id="q" placeholder="${t('search')}" value="${esc(query)}" autocomplete="off">
       <ul class="list" id="list"></ul>
       <a class="fab" href="#/add"><span>+</span> ${t('addOrder')}</a>`,
-      { extra: `<a class="iconbtn" href="#/report">${t('report')}</a><a class="iconbtn" href="#/more">${t('settings')}</a>` });
+      { nav: 'orders' });
 
     const renderList = () => {
       const q = query.trim().toLowerCase();
@@ -138,15 +232,7 @@
       list.sort(tab === 'completed'
         ? (a, b) => (b.completedAt || '').localeCompare(a.completedAt || '')
         : (a, b) => a.due.localeCompare(b.due) || (a.time || '99:99').localeCompare(b.time || '99:99') || a.createdAt.localeCompare(b.createdAt));
-      $('#list').innerHTML = list.length ? list.map(o => {
-        const di = dueInfo(o), bal = balance(o);
-        return `<li><a class="order ${di.cls}" href="#/order/${o.id}">
-          <div class="row"><span class="name">${esc(o.name)}</span><span class="badge ${di.cls}">${di.label}</span></div>
-          <div class="what">${esc(o.item)}</div>
-          <div class="row"><span style="color:var(--muted);font-size:13px">${t('total', money(o.amount))}</span>
-            <span class="owing ${bal ? '' : 'clear'}">${bal ? t('owes', money(bal)) : t('paidFull')}</span></div>
-        </a></li>`;
-      }).join('') : `<li class="empty"><big>${q ? '🔍' : tab === 'pending' ? '📒' : '✅'}</big>${
+      $('#list').innerHTML = list.length ? list.map(orderCard).join('') : `<li class="empty"><big>${q ? '🔍' : tab === 'pending' ? '📒' : '✅'}</big>${
         q ? t('noMatch') : tab === 'pending' ? t('emptyTo') : t('emptyDone')}</li>`;
     };
     renderList();
@@ -165,11 +251,13 @@
   function formScreen(editId) {
     const o = editId ? orders.find(x => x.id === editId) : null;
     if (editId && !o) { location.hash = '#/'; return; }
-    const v = o || { name: '', phone: '', item: '', amount: '', due: '', time: '' };
+    const v = o || { name: '', phone: '', item: '', amount: '', due: '', time: '', ...(prefill || {}) };
+    prefill = null;
+    const known = o ? [] : customers();
     shell(o ? t('editTitle') : t('addTitle'), `
       <form id="f" novalidate>
         <label>${t('custName')}
-          <input name="name" required maxlength="80" autocomplete="off" autocapitalize="words" placeholder="${t('custNamePh')}" value="${esc(v.name)}"></label>
+          <input name="name" required maxlength="80" autocomplete="off" autocapitalize="words" placeholder="${t('custNamePh')}" value="${esc(v.name)}" ${o ? '' : 'list="custlist"'}>${o ? '' : `<datalist id="custlist">${known.map(c => `<option value="${esc(c.name)}">`).join('')}</datalist>`}</label>
         <label>${t('phone')} <small>${t('phoneHint')}</small>
           <input name="phone" type="tel" maxlength="30" placeholder="e.g. 0803 123 4567" value="${esc(v.phone)}"></label>
         <label>${t('orderDetails')}
@@ -219,7 +307,13 @@
         save(); tab = 'pending'; toast(t('tOrderSaved')); location.hash = '#/';
       }
     });
-    if (!o) f.name.focus();
+    if (!o) {
+      f.name.addEventListener('change', () => {   // picking a known customer fills in their phone number
+        const c = known.find(x => x.name.toLowerCase() === f.name.value.trim().toLowerCase());
+        if (c && c.phone && !f.phone.value.trim()) f.phone.value = c.phone;
+      });
+      if (!f.name.value) f.name.focus();
+    }
   }
 
   /* ---------- WhatsApp ---------- */
@@ -352,18 +446,101 @@
         <p class="rc-thanks">${t('thanks')}</p>
       </article>
       <div class="actions noprint" style="margin-top:14px">
-        <button class="btn" id="print">${t('printBtn')}</button>
-        <button class="btn wa" id="sendrc">${t('sendReceipt')}</button>
+        <button class="btn wa" id="sendrc">📄 ${t('sendPdf')}</button>
+        <p class="hint">${t('pdfHint', esc(o.name))}</p>
+        <button class="btn secondary" id="print">${t('printBtn')}</button>
       </div>`, { back: '#/order/' + o.id });
     $('#print').addEventListener('click', () => window.print());
-    $('#sendrc').addEventListener('click', async () => {
-      const text = [`${biz} – ${t('receipt')} #${no}`, settings.bizInfo, '', `${t('customerLbl')}: ${o.name}`, o.item, `${t('collection')}: ${due}`, '',
-        `${t('totalPriceRow')}: ${money(o.amount)}`, `${t('paidRow')}: ${money(paid(o))}`, `${t('balanceRow')}: ${money(bal)}`,
-        bal ? t('stampPart') : t('stampPaid'), '', t('thanks')].filter(x => x !== undefined && x !== '' || x === '').join('\n').replace(/\n{3,}/g, '\n\n');
-      const n = o.phone ? waNumber(o.phone) : '';
-      if (n) { window.open(`https://wa.me/${n}?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); return; }
-      try { if (navigator.share) await navigator.share({ text }); else { await navigator.clipboard.writeText(text); toast(t('receiptCopied')); } } catch { /* cancelled */ }
+    $('#sendrc').addEventListener('click', async e => {
+      const btn = e.currentTarget, label = btn.innerHTML; btn.disabled = true; btn.textContent = t('pdfMaking');
+      try {
+        const blob = await receiptPdf(o, { no, biz, due, issued });
+        const file = new File([blob], `Receipt-${o.name.replace(/[^\w]+/g, '-').replace(/^-|-$/g, '') || 'customer'}-${no}.pdf`, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try { await navigator.share({ files: [file], title: `${t('receipt')} ${no}` }); }   // phone: pick WhatsApp, then the customer
+          catch (err) { if (err && err.name !== 'AbortError') throw err; }
+        } else {   // computer / older phone: save the PDF, then open the customer's chat so it can be attached
+          const url = URL.createObjectURL(blob);
+          const a = Object.assign(document.createElement('a'), { href: url, download: file.name });
+          document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+          toast(t('pdfSaved'));
+          const n = o.phone ? waNumber(o.phone) : '';
+          if (n) setTimeout(() => window.open(`https://wa.me/${n}`, '_blank', 'noopener'), 900);
+        }
+      } catch (err) { toast(t('pdfFail')); }
+      btn.disabled = false; btn.innerHTML = label;
     });
+  }
+
+  /* ---------- Receipt as a PDF file (drawn on a canvas, wrapped in a one-page PDF) ---------- */
+  function drawReceipt(ctx, o, m) {
+    const W = 720, P = 48, F = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', G = '#1f5c4a';
+    const bal = balance(o); let y = 0;
+    const font = (sz, w = 400) => { ctx.font = `${w} ${sz}px ${F}`; };
+    const wrap = (txt, maxW) => {
+      const out = [];
+      String(txt).split('\n').forEach(par => {
+        let line = '';
+        par.split(' ').forEach(word => { const test = line ? line + ' ' + word : word; if (ctx.measureText(test).width > maxW && line) { out.push(line); line = word; } else line = test; });
+        out.push(line);
+      });
+      return out;
+    };
+    const center = (txt, sz, w, col, gap) => { font(sz, w); ctx.fillStyle = col; ctx.textAlign = 'center'; wrap(txt, W - P * 2).forEach(l => { ctx.fillText(l, W / 2, y + sz); y += sz * 1.3; }); y += gap; };
+    const left = (txt, sz, w, col, gap) => { font(sz, w); ctx.fillStyle = col; ctx.textAlign = 'left'; wrap(txt, W - P * 2).forEach(l => { ctx.fillText(l, P, y + sz); y += sz * 1.35; }); y += gap; };
+    const row = (l, r, sz, w, col, gap) => { font(sz, w); ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.fillText(l, P, y + sz); ctx.textAlign = 'right'; ctx.fillText(r, W - P, y + sz); y += sz * 1.5 + gap; };
+    const rule = (col, wd, dash) => { ctx.strokeStyle = col; ctx.lineWidth = wd; ctx.setLineDash(dash || []); ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke(); ctx.setLineDash([]); y += 14; };
+    const label = txt => { left(txt.toUpperCase(), 14, 700, '#777', 2); };
+
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, 4000);
+    y = P;
+    center(m.biz, 32, 800, G, 4);
+    if (settings.bizInfo) center(settings.bizInfo, 17, 400, '#555', 4);
+    y += 6; rule('#cfc9bb', 2, [8, 6]); y += 4;
+    center(t('receipt').toUpperCase().split('').join(' '), 20, 800, G, 8);
+    row(`${t('receiptNo')} ${m.no}`, `${t('receiptDate')}: ${m.issued}`, 15, 400, '#555', 6);
+    rule('#eee7d8', 1.5);
+    label(t('customerLbl')); left(o.name, 22, 700, '#1a1a1a', 0); if (o.phone) left(o.phone, 18, 400, '#1a1a1a', 0); y += 6; rule('#eee7d8', 1.5);
+    label(t('orderDetails')); left(o.item, 19, 400, '#1a1a1a', 4); rule('#eee7d8', 1.5);
+    label(t('collection')); left(m.due, 19, 700, '#1a1a1a', 4); rule('#eee7d8', 1.5);
+    label(t('paymentsHdr'));
+    if (o.payments.length) o.payments.forEach(p => row(`${noteLabel(p.note || 'Payment')} · ${fmtShort(ymd(new Date(p.date)))}`, money(p.amount), 19, 400, '#1a1a1a', 0));
+    else left(t('noPayYet'), 19, 400, '#1a1a1a', 0);
+    y += 8; rule(G, 3); y += 2;
+    row(t('totalPriceRow'), money(o.amount), 19, 400, '#1a1a1a', 0);
+    row(t('paidRow'), money(paid(o)), 19, 400, '#1a1a1a', 0);
+    row(t('balanceRow'), money(bal), 24, 800, G, 4);
+    y += 18;
+    const stamp = bal ? t('stampPart') : t('stampPaid'), col = bal ? '#b4531a' : '#2e7d32';
+    font(22, 800); const sw = ctx.measureText(stamp.split('').join(' ')).width + 40;
+    ctx.save(); ctx.translate(W / 2, y + 26); ctx.rotate(-0.07); ctx.strokeStyle = col; ctx.lineWidth = 4;
+    ctx.strokeRect(-sw / 2, -26, sw, 52); ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.fillText(stamp.split('').join(' '), 0, 8); ctx.restore();
+    y += 78;
+    center(t('thanks'), 17, 400, '#555', 0); y += P - 10;
+    return Math.ceil(y);
+  }
+
+  async function receiptPdf(o, m) {
+    const S = 2, W = 720;
+    const probe = document.createElement('canvas').getContext('2d');
+    const H = drawReceipt(probe, o, m);
+    const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
+    const ctx = cv.getContext('2d'); ctx.scale(S, S); drawReceipt(ctx, o, m);
+    const jpg = new Uint8Array(await new Promise((res, rej) => cv.toBlob(b => b ? b.arrayBuffer().then(res, rej) : rej(new Error('no image')), 'image/jpeg', 0.92)));
+    // one-page PDF, 420pt wide, the receipt image filling the page
+    const pw = 420, ph = Math.round(pw * H / W), enc = new TextEncoder(), parts = [], off = [];
+    let len = 0; const push = x => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); len += b.length; };
+    const obj = (n, body, stream) => { off[n] = len; push(`${n} 0 obj\n${body}\n`); if (stream) { push('stream\n'); push(stream); push('\nendstream\n'); } push('endobj\n'); };
+    const content = `q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;
+    push('%PDF-1.4\n');
+    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`);
+    obj(4, `<< /Length ${content.length} >>`, content);
+    obj(5, `<< /Type /XObject /Subtype /Image /Width ${W * S} /Height ${H * S} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>`, jpg);
+    const xref = len; push(`xref\n0 6\n0000000000 65535 f \n` + [1, 2, 3, 4, 5].map(n => String(off[n]).padStart(10, '0') + ' 00000 n \n').join(''));
+    push(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+    return new Blob(parts, { type: 'application/pdf' });
   }
 
   /* ---------- Weekly report ---------- */
@@ -414,7 +591,7 @@
       </div>
       ${dueWeek.length ? `<div class="card"><h2>${t('deliverThisWeek')}</h2><ul class="hist" style="margin-top:0">${dueWeek.map(o =>
         `<li><a href="#/order/${o.id}" style="color:inherit;text-decoration:none;flex:1">${esc(o.name)} · ${fmtShort(o.due)}</a><b>${balance(o) ? t('owedSuffix', money(balance(o))) : t('paidShort')}</b></li>`).join('')}</ul></div>` : ''}
-      <button class="btn secondary" id="share">${t('share')}</button>`, { back: true });
+      <button class="btn secondary" id="share">${t('share')}</button>`, { nav: 'report' });
 
     $('#prev').addEventListener('click', () => { weekOffset--; reportScreen(); });
     $('#next').addEventListener('click', () => { if (weekOffset < 0) { weekOffset++; reportScreen(); } });
@@ -497,7 +674,7 @@
           <input type="file" id="file" accept=".json,application/json" hidden>
         </div>
       </div>
-      <p style="text-align:center"><a href="#/welcome" class="chip" style="text-decoration:none;display:inline-block">${t('showWelcome')}</a></p>`, { back: true });
+      <p style="text-align:center"><a href="#/welcome" class="chip" style="text-decoration:none;display:inline-block">${t('showWelcome')}</a></p>`, { nav: 'more' });
     bindLang(moreScreen);
 
     $('#sf').addEventListener('submit', e => {
@@ -546,6 +723,8 @@
     else if (h.startsWith('edit/')) formScreen(h.slice(5));
     else if (h.startsWith('order/')) detailScreen(h.slice(6));
     else if (h.startsWith('receipt/')) receiptScreen(h.slice(8));
+    else if (h === 'customers') customersScreen();
+    else if (h.startsWith('customer/')) customerScreen(decodeURIComponent(h.slice(9)));
     else if (h === 'report') reportScreen();
     else if (h === 'more') moreScreen();
     else ordersScreen();
